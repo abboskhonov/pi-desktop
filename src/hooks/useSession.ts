@@ -27,6 +27,8 @@ interface UseSessionResult {
 type TokenBuffer = {
   textDelta: string;
   thinkingDelta: string;
+  /** toolCallId → accumulated output */
+  toolOutputs: Map<string, string>;
 };
 
 export function useSession(sessionPath: string | null): UseSessionResult {
@@ -34,14 +36,16 @@ export function useSession(sessionPath: string | null): UseSessionResult {
   const [sessionName, setSessionName] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [input, setInput] = React.useState("");
+  const inputRef = React.useRef(input);
+  inputRef.current = input;
   const [error, setError] = React.useState<string | null>(null);
   const [currentModel, setCurrentModel] = React.useState<string | null>(null);
 
   const activity = useSessionActivity(sessionPath || "");
   const isStreaming = activity.isStreaming;
 
-  // Token batching: accumulate deltas in a ref and flush via rAF.
-  // Reduces setMessages calls from ~1 per token to ~1 per frame.
+  // Token batching: accumulate text/thinking/tool deltas in a ref and flush via rAF.
+  // Reduces setMessages calls from ~N per token to ~1 per frame.
   const bufferRef = React.useRef<TokenBuffer | null>(null);
   const flushRafRef = React.useRef<number>(0);
 
@@ -55,14 +59,34 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       const last = prev.at(-1);
       if (!last || last.role !== "assistant") return prev;
 
+      let nextLast = { ...last };
+
+      // Apply text delta
+      if (buf.textDelta) {
+        nextLast = { ...nextLast, text: nextLast.text + buf.textDelta };
+      }
+
+      // Apply thinking delta
+      if (buf.thinkingDelta) {
+        nextLast = {
+          ...nextLast,
+          thinking: (nextLast.thinking ?? "") + buf.thinkingDelta,
+        };
+      }
+
+      // Apply batched tool output deltas
+      if (buf.toolOutputs.size > 0) {
+        nextLast = {
+          ...nextLast,
+          toolCalls: (nextLast.toolCalls ?? []).map((card) => {
+            const delta = buf.toolOutputs.get(card.toolCallId);
+            return delta ? { ...card, output: (card.output ?? "") + delta } : card;
+          }),
+        };
+      }
+
       const next = [...prev];
-      next[next.length - 1] = {
-        ...last,
-        text: last.text + buf.textDelta,
-        thinking: buf.thinkingDelta
-          ? (last.thinking ?? "") + buf.thinkingDelta
-          : last.thinking,
-      };
+      next[next.length - 1] = nextLast;
       return next;
     });
   }, []);
@@ -219,14 +243,27 @@ export function useSession(sessionPath: string | null): UseSessionResult {
         assistantEvent
       ) {
         if (assistantEvent.type === "text_delta" && assistantEvent.delta) {
-          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "" };
+          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "", toolOutputs: new Map() };
           bufferRef.current.textDelta += assistantEvent.delta;
           scheduleFlush();
           return;
         }
         if (assistantEvent.type === "thinking_delta" && assistantEvent.delta) {
-          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "" };
+          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "", toolOutputs: new Map() };
           bufferRef.current.thinkingDelta += assistantEvent.delta;
+          scheduleFlush();
+          return;
+        }
+      }
+
+      // Batch tool_execution_update deltas
+      if (ev.type === "tool_execution_update") {
+        const toolCallId = ev.toolCallId as string;
+        const partial = resultText(ev.partialResult);
+        if (toolCallId && partial) {
+          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "", toolOutputs: new Map() };
+          const existing = bufferRef.current.toolOutputs.get(toolCallId) ?? "";
+          bufferRef.current.toolOutputs.set(toolCallId, existing + partial);
           scheduleFlush();
           return;
         }
@@ -268,17 +305,18 @@ export function useSession(sessionPath: string | null): UseSessionResult {
 
   const sendMessage = React.useCallback(
     (overrideText?: string) => {
-      const text = (overrideText ?? input).trim();
+      const text = (overrideText ?? inputRef.current).trim();
       if (!text) return;
 
       setInput("");
+      inputRef.current = "";
       setError(null);
 
       window.electron.sendPrompt(text).catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
       });
     },
-    [input]
+    []
   );
 
   const abort = React.useCallback(() => {
@@ -306,4 +344,12 @@ export function useSession(sessionPath: string | null): UseSessionResult {
     error,
     currentModel,
   };
+}
+
+function resultText(result: unknown): string {
+  if (typeof result === "string") return result;
+  if (result && typeof result === "object" && "output" in result) {
+    return String((result as { output?: unknown }).output ?? "");
+  }
+  return "";
 }

@@ -6,10 +6,12 @@ import {
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/sidebar-01/app-sidebar";
 import { ChatPane } from "@/components/chat/ChatPane";
+import { SkillsView } from "@/components/skills/SkillsView";
 
 export default function Sidebar01() {
   const [activeSessionPath, setActiveSessionPath] = React.useState<string | null>(null);
   const [activeWorkspacePath, setActiveWorkspacePath] = React.useState<string | null>(null);
+  const [activeView, setActiveView] = React.useState<'chat' | 'skills' | 'extensions'>('chat');
   const pendingPromptRef = React.useRef<string | null>(null);
   const pendingModelRef = React.useRef<{ id: string; provider: string } | null>(null);
 
@@ -36,13 +38,18 @@ export default function Sidebar01() {
     <SidebarProvider>
       <AppSidebar
         activeSessionPath={activeSessionPath}
-        onSelectSession={(path) => setActiveSessionPath(path)}
+        activeView={activeView}
+        onSelectSession={(path) => {
+          setActiveSessionPath(path);
+          setActiveView('chat');
+        }}
         onWorkspaceChange={(path) => setActiveWorkspacePath(path)}
+        onNavigate={(view) => setActiveView(view as 'chat' | 'skills' | 'extensions')}
       />
-      <SidebarInset className="flex flex-col bg-background">
+      <SidebarInset className="flex flex-col bg-background overflow-hidden">
         <div className="flex h-11 shrink-0 items-center gap-3 border-b border-border/40 px-4">
           <SidebarTrigger className="sm:hidden" />
-          {activeSessionPath && (
+          {activeView === 'chat' && activeSessionPath && (
             <button
               onClick={() => setActiveSessionPath(null)}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -50,25 +57,41 @@ export default function Sidebar01() {
               ← Back
             </button>
           )}
+          {activeView !== 'chat' && (
+            <button
+              onClick={() => setActiveView('chat')}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Back
+            </button>
+          )}
         </div>
         <div className="flex-1 overflow-hidden">
-          <ChatPane
-            sessionPath={activeSessionPath}
-            workspacePath={activeWorkspacePath}
-            onStartSession={(text, model) => {
-              if (!activeWorkspacePath) {
-                console.warn("No active workspace to start a session in");
-                return;
-              }
-              pendingPromptRef.current = text;
-              if (model) pendingModelRef.current = model;
-              window.electron.newSession(activeWorkspacePath).catch((err) => {
-                console.error("Failed to start session:", err);
-                pendingPromptRef.current = null;
-                pendingModelRef.current = null;
-              });
-            }}
-          />
+          {activeView === 'chat' ? (
+            <ChatPane
+              sessionPath={activeSessionPath}
+              workspacePath={activeWorkspacePath}
+              onStartSession={(text, model) => {
+                if (!activeWorkspacePath) {
+                  console.warn("No active workspace to start a session in");
+                  return;
+                }
+                pendingPromptRef.current = text;
+                if (model) pendingModelRef.current = model;
+                window.electron.newSession(activeWorkspacePath).catch((err) => {
+                  console.error("Failed to start session:", err);
+                  pendingPromptRef.current = null;
+                  pendingModelRef.current = null;
+                });
+              }}
+            />
+          ) : activeView === 'skills' ? (
+            <SkillsView />
+          ) : (
+            <div className="flex h-full items-center justify-center">
+              <p className="text-sm text-muted-foreground">Extensions coming soon</p>
+            </div>
+          )}
         </div>
       </SidebarInset>
     </SidebarProvider>

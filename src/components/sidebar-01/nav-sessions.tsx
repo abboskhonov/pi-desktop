@@ -35,19 +35,6 @@ import { Button } from "@/components/ui/button";
 import { useSessionActivity } from "@/lib/sessionActivity";
 import type { SessionListItem } from "../../../types/electron-api";
 
-function formatTimeAgo(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffH = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffD = Math.floor(diffH / 24);
-  if (diffH < 1) return "just now";
-  if (diffH < 24) return `${diffH}h ago`;
-  if (diffD < 7) return `${diffD}d ago`;
-  if (diffD < 30) return `${Math.floor(diffD / 7)}w ago`;
-  return `${Math.floor(diffD / 30)}mo ago`;
-}
-
 interface NavSessionsProps {
   sessions: SessionListItem[];
   activeSessionPath?: string;
@@ -125,7 +112,7 @@ function SessionItem({
         ) : (
           <button
             onClick={() => onSelect?.(session.path)}
-            className="w-full text-left flex items-center gap-2 rounded-md px-2.5 py-2"
+            className="w-full text-left flex items-center gap-2 rounded-md px-2.5 py-2 pr-7"
           >
             <span className="flex items-center gap-1.5 flex-1 min-w-0">
               {session.pinned && (
@@ -143,10 +130,6 @@ function SessionItem({
             {!activity.isStreaming && activity.hasNewContent && !isActive && (
               <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-blue-500" />
             )}
-
-            <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
-              {formatTimeAgo(session.updatedAt)}
-            </span>
           </button>
         )}
 

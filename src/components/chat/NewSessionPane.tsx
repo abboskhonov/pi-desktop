@@ -73,28 +73,37 @@ export function NewSessionPane({ onStartSession, onSend }: NewSessionPaneProps) 
   };
 
   return (
-    <div className="flex flex-1 min-h-0 flex-col justify-end">
+    <div className="flex flex-1 min-h-0 flex-col justify-center">
       <div className="shrink-0 px-4 pb-6 pt-4">
-        <div className="flex flex-col gap-4 w-full max-w-2xl mx-auto">
+        <div className="flex flex-col gap-4 w-full max-w-3xl mx-auto">
           {/* Composer card */}
-          <div className="flex min-h-[120px] flex-col rounded-2xl cursor-text bg-card border border-border shadow-lg">
+          <div className="flex min-h-[120px] flex-col rounded-2xl cursor-text bg-card border border-border">
             <div className="flex-1 relative overflow-y-auto max-h-[258px]">
               <Textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything"
-                className="w-full border-0 p-4 transition-[padding] duration-200 ease-in-out min-h-[56px] outline-none text-[16px] text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent whitespace-pre-wrap break-words placeholder:text-muted-foreground/50"
+                className="w-full border-0 p-3 bg-transparent! transition-[padding] duration-200 ease-in-out min-h-[48.4px] outline-none text-[16px] text-foreground resize-none shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 whitespace-pre-wrap break-words placeholder:text-muted-foreground/50"
               />
             </div>
 
-            <div className="flex min-h-[40px] items-center gap-2 p-3 pb-2">
+            <div className="flex min-h-[40px] items-center gap-2 p-2 pb-1">
               <div className="flex aspect-square items-center gap-1 rounded-full bg-muted p-1.5 text-xs">
                 <IconCloud className="h-4 w-4 text-muted-foreground" />
               </div>
 
-              <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-                <SelectTrigger className="w-fit border-none bg-transparent p-0 text-sm text-muted-foreground hover:text-foreground focus:ring-0 shadow-none">
+              <Select
+                value={selectedModelId}
+                onValueChange={(value) => {
+                  setSelectedModelId(value);
+                  const model = models.find((m) => m.id === value);
+                  if (model) {
+                    window.electron.setModel(model.provider, model.id).catch(console.error);
+                  }
+                }}
+              >
+                <SelectTrigger className="w-fit border-none bg-transparent! p-0 text-sm text-muted-foreground hover:text-foreground focus:ring-0 shadow-none h-auto gap-1">
                   <SelectValue placeholder="Select model">
                     <span>{selectedModel?.name ?? "Model"}</span>
                   </SelectValue>

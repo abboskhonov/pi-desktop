@@ -1,19 +1,30 @@
 import * as React from "react";
-import { Sidebar, SidebarContent } from "@/components/ui/sidebar";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+} from "@/components/ui/sidebar";
 import { NavHeader } from "@/components/sidebar-01/nav-header";
 import { NavSessions } from "@/components/sidebar-01/nav-sessions";
+import { IconSettings } from "@tabler/icons-react";
+import { useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 import type { WorkspaceInfo, SessionListItem } from "../../../types/electron-api";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeSessionPath: string | null;
+  activeView?: string;
   onSelectSession: (path: string) => void;
   onWorkspaceChange?: (path: string | null) => void;
+  onNavigate?: (view: string) => void;
 }
 
 export function AppSidebar({
   activeSessionPath,
+  activeView,
   onSelectSession,
   onWorkspaceChange,
+  onNavigate,
   ...props
 }: AppSidebarProps) {
   const [workspaces, setWorkspaces] = React.useState<WorkspaceInfo[]>([]);
@@ -66,6 +77,7 @@ export function AppSidebar({
     <Sidebar {...props} collapsible="icon" className="border-r border-border/40">
       <SidebarContent className="flex flex-col gap-0 overflow-hidden">
         <NavHeader
+          activeView={activeView}
           workspaces={workspaces}
           sessions={sessions}
           activeWorkspace={activeWorkspace ?? null}
@@ -86,6 +98,7 @@ export function AppSidebar({
             }
             await window.electron.newSession(activeWorkspacePath);
           }}
+          onNavigate={onNavigate}
         />
         <NavSessions
           sessions={sessions}
@@ -93,6 +106,28 @@ export function AppSidebar({
           onSelectSession={onSelectSession}
         />
       </SidebarContent>
+      <SettingsFooter />
     </Sidebar>
+  );
+}
+
+function SettingsFooter() {
+  const { state } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  return (
+    <SidebarFooter className={cn("border-t border-border/20", isCollapsed && "items-center")}>
+      <button
+        className={cn(
+          "flex items-center gap-2.5 rounded-md text-left text-sm text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors",
+          isCollapsed ? "h-8 w-8 justify-center p-0" : "w-full px-2.5 py-[7px]"
+        )}
+        title="Settings"
+        aria-label="Settings"
+      >
+        <IconSettings className="h-4 w-4 shrink-0" />
+        {!isCollapsed && <span>Settings</span>}
+      </button>
+    </SidebarFooter>
   );
 }

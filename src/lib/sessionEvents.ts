@@ -37,7 +37,7 @@ export function applySessionEvent(
         return [
           ...messages,
           {
-            id: `u-${msg.timestamp ?? Date.now()}`,
+            id: `u-${crypto.randomUUID()}`,
             role: "user",
             text: contentToText(msg.content),
           },
@@ -47,7 +47,7 @@ export function applySessionEvent(
         return [
           ...messages,
           {
-            id: `a-${msg.timestamp ?? Date.now()}`,
+            id: `a-${crypto.randomUUID()}`,
             role: "assistant",
             text: "",
             streaming: true,

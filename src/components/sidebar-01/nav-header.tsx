@@ -11,10 +11,10 @@ import {
   IconChevronDown,
   IconPlus,
   IconBolt,
-  IconHome,
   IconGitBranch,
-  IconTerminal2,
   IconFolder,
+  IconSparkles,
+  IconPuzzle,
   IconLayoutSidebar,
   IconLayoutSidebarRightCollapse,
 } from "@tabler/icons-react";
@@ -23,13 +23,14 @@ import { CommandMenu } from "@/components/chat/CommandMenu";
 import type { WorkspaceInfo, SessionListItem } from "../../../types/electron-api";
 
 const navItems = [
-  { id: "new-session", title: "New Session", icon: IconHome, active: true },
+  { id: "new-session", title: "New Session", icon: IconPlus, active: true },
   { id: "git", title: "Git", icon: IconGitBranch },
-  { id: "terminal", title: "Terminal", icon: IconTerminal2 },
-  { id: "files", title: "Files", icon: IconFolder },
+  { id: "skills", title: "Skills", icon: IconSparkles },
+  { id: "extensions", title: "Extensions", icon: IconPuzzle },
 ];
 
 export function NavHeader({
+  activeView,
   workspaces,
   sessions,
   activeWorkspace,
@@ -37,7 +38,9 @@ export function NavHeader({
   onSelectSession,
   onAddWorkspace,
   onNewSession,
+  onNavigate,
 }: {
+  activeView?: string;
   workspaces: WorkspaceInfo[];
   sessions: SessionListItem[];
   activeWorkspace: WorkspaceInfo | null;
@@ -45,10 +48,18 @@ export function NavHeader({
   onSelectSession: (path: string) => void;
   onAddWorkspace: () => void;
   onNewSession: () => void;
+  onNavigate?: (view: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [activeNav, setActiveNav] = React.useState("new-session");
   const { state, toggleSidebar } = useSidebar();
+
+  // Map app view to nav item id for highlight sync
+  const activeNav = React.useMemo(() => {
+    if (activeView === "skills") return "skills";
+    if (activeView === "extensions") return "extensions";
+    if (activeView === "git") return "git";
+    return "new-session";
+  }, [activeView]);
   const isCollapsed = state === "collapsed";
 
   React.useEffect(() => {
@@ -94,8 +105,10 @@ export function NavHeader({
             <button
               key={item.id}
               onClick={() => {
-                setActiveNav(item.id);
                 if (item.id === "new-session") onNewSession();
+                if (item.id === "skills" || item.id === "extensions" || item.id === "git") {
+                  onNavigate?.(item.id);
+                }
               }}
               className={cn(
                 "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
@@ -193,8 +206,10 @@ export function NavHeader({
             <button
               key={item.id}
               onClick={() => {
-                setActiveNav(item.id);
                 if (item.id === "new-session") onNewSession();
+                if (item.id === "skills" || item.id === "extensions" || item.id === "git") {
+                  onNavigate?.(item.id);
+                }
               }}
               className={cn(
                 "flex items-center gap-2.5 w-full rounded-md px-2.5 py-2 text-left text-sm transition-colors",
