@@ -9,6 +9,10 @@ import {
   IconPuzzle,
   IconCopy,
   IconCommand,
+  IconChevronDown,
+  IconChevronUp,
+  IconPackage,
+  IconTerminal,
 } from "@tabler/icons-react";
 import { Input } from "@/components/ui/input";
 import { refreshModels } from "@/hooks/useModels";
@@ -20,6 +24,13 @@ interface NpmPackage {
   keywords?: string[];
 }
 
+interface InstalledExtension {
+  name: string;
+  version: string;
+  description?: string;
+  installedAt?: string;
+}
+
 export function ExtensionsView() {
   const [query, setQuery] = React.useState("");
   const [packages, setPackages] = React.useState<NpmPackage[]>([]);
@@ -28,7 +39,36 @@ export function ExtensionsView() {
   const [installResult, setInstallResult] = React.useState<
     Record<string, "success" | "error">
   >({});
+  const [installOutput, setInstallOutput] = React.useState<
+    Record<string, { stdout: string; stderr: string }>
+  >({});
+  const [expandedOutput, setExpandedOutput] = React.useState<string | null>(null);
   const [copiedId, setCopiedId] = React.useState<string | null>(null);
+  const [installed, setInstalled] = React.useState<InstalledExtension[]>([]);
+  const [installedLoading, setInstalledLoading] = React.useState(true);
+
+  // Load installed extensions on mount
+  React.useEffect(() => {
+    loadInstalled();
+    const unsub = window.electron.onSidecarReady(() => {
+      // Sidecar restarted — refresh models AND re-scan installed extensions
+      refreshModels();
+      loadInstalled();
+    });
+    return unsub;
+  }, []);
+
+  const loadInstalled = async () => {
+    setInstalledLoading(true);
+    try {
+      const list = await window.electron.getInstalledExtensions();
+      setInstalled(list);
+    } catch (err) {
+      console.error("Failed to load installed extensions:", err);
+    } finally {
+      setInstalledLoading(false);
+    }
+  };
 
   const search = React.useCallback(async (q: string) => {
     setLoading(true);
@@ -58,15 +98,21 @@ export function ExtensionsView() {
 
   const handleInstall = React.useCallback(async (pkgName: string) => {
     setInstallingId(pkgName);
+    setExpandedOutput(pkgName);
     try {
       const result = await window.electron.installExtension(pkgName);
       setInstallResult((prev) => ({
         ...prev,
         [pkgName]: result.success ? "success" : "error",
       }));
+      setInstallOutput((prev) => ({
+        ...prev,
+        [pkgName]: { stdout: result.stdout, stderr: result.stderr },
+      }));
       if (result.success) {
-        // Extension may have registered new models — refresh the list
+        // Wait for sidecar-ready event to refresh models
         refreshModels();
+        loadInstalled();
       }
     } catch (err) {
       console.error("Install error:", err);
@@ -95,6 +141,38 @@ export function ExtensionsView() {
             </p>
           </div>
         </div>
+
+        {/* Installed extensions */}
+        {installed.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+              <IconPackage className="h-4 w-4 text-muted-foreground" />
+              Installed ({installed.length})
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {installed.map((ext) => (
+                <div
+                  key={ext.name}
+                  className="inline-flex items-center gap-2 rounded-lg border border-border/40 bg-card/50 px-3 py-2"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{ext.name}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      v{ext.version}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {installedLoading && installed.length === 0 && (
+          <div className="mb-8 flex items-center gap-2 text-sm text-muted-foreground">
+            <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+            Scanning installed extensions...
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative mb-6">
@@ -128,8 +206,9 @@ export function ExtensionsView() {
             {packages.map((pkg) => {
               const isInstalling = installingId === pkg.name;
               const result = installResult[pkg.name];
+              const output = installOutput[pkg.name];
+              const isExpanded = expandedOutput === pkg.name;
               const isCopied = copiedId === pkg.name;
-              const installCommand = `pi install npm:${pkg.name}`;
 
               return (
                 <div
@@ -174,6 +253,34 @@ export function ExtensionsView() {
                           {kw}
                         </span>
                       ))}
+                    </div>
+                  )}
+
+                  {/* Install output (collapsible) */}
+                  {output && (
+                    <div className="mt-1">
+                      <button
+                        onClick={() => setExpandedOutput(isExpanded ? null : pkg.name)}
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <IconTerminal className="h-3 w-3" />
+                        Install output
+                        {isExpanded ? (
+                          <IconChevronUp className="h-3 w-3" />
+                        ) : (
+                          <IconChevronDown className="h-3 w-3" />
+                        )}
+                      </button>
+                      {isExpanded && (
+                        <div className="mt-1 rounded bg-muted/50 p-2 font-mono text-[10px] text-muted-foreground max-h-32 overflow-y-auto">
+                          {output.stdout && (
+                            <pre className="whitespace-pre-wrap break-all">{output.stdout}</pre>
+                          )}
+                          {output.stderr && (
+                            <pre className="whitespace-pre-wrap break-all text-red-400 mt-1">{output.stderr}</pre>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 

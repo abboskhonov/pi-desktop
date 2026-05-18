@@ -2,7 +2,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { spawn } from 'node:child_process'
+import { spawn, execSync } from 'node:child_process'
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readWindowState, writeWindowState } from './window-state'
 import { SessionIndexStore } from './sessionIndex'
@@ -46,6 +46,9 @@ function requireSidecar(): PiSidecarHost {
           _sessionFile: state?.sessionFile ?? null,
           _sessionId: state?.sessionId ?? null,
         })
+      },
+      onReady: () => {
+        mainWindow?.webContents.send('sidecar-ready')
       },
     })
     piSidecarHost.start()
@@ -176,6 +179,7 @@ function createWindow(): BrowserWindow {
     minHeight: 600,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     frame: process.platform === 'darwin',
+    icon: path.join(currentDir, '../../build/icon.png'),
     webPreferences: {
       preload: path.join(currentDir, '../preload/index.js'),
       contextIsolation: true,
@@ -382,22 +386,22 @@ function registerIpcHandlers(): void {
   })
 
   // ── Chat / Agent ───────────────────────────────────────────────────────
-  ipcMain.handle('send-prompt', async (_event, text: string, contextPrefix?: string) => {
+  ipcMain.handle('send-prompt', async (_event, text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>) => {
     const active = await ensureActiveSession()
     if (!active) throw new Error('No active session. Open or create a session first.')
-    requireSidecar().send({ type: 'prompt', text, contextPrefix })
+    requireSidecar().send({ type: 'prompt', text, contextPrefix, images })
   })
 
-  ipcMain.handle('send-steer', async (_event, text: string, contextPrefix?: string) => {
+  ipcMain.handle('send-steer', async (_event, text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>) => {
     const active = await ensureActiveSession()
     if (!active) throw new Error('No active session. Open or create a session first.')
-    requireSidecar().send({ type: 'steer', text, contextPrefix })
+    requireSidecar().send({ type: 'steer', text, contextPrefix, images })
   })
 
-  ipcMain.handle('send-follow-up', async (_event, text: string, contextPrefix?: string) => {
+  ipcMain.handle('send-follow-up', async (_event, text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>) => {
     const active = await ensureActiveSession()
     if (!active) throw new Error('No active session. Open or create a session first.')
-    requireSidecar().send({ type: 'follow_up', text, contextPrefix })
+    requireSidecar().send({ type: 'follow_up', text, contextPrefix, images })
   })
 
   ipcMain.handle('abort-session', async () => {
@@ -410,6 +414,8 @@ function registerIpcHandlers(): void {
     const response = await requireSidecar().request<
       Extract<SidecarMessage, { type: 'models_result' }>
     >({ type: 'get_models', requestId })
+    const models = response.models as Array<{ id: string; name: string; provider: string }>
+    console.log('[main] get-models returned', models.length, 'models:', models.map((m) => `${m.provider}/${m.name}`))
     return response.models
   })
 
@@ -480,6 +486,10 @@ function registerIpcHandlers(): void {
     }
   })
 
+  ipcMain.handle('get-installed-extensions', async () => {
+    return scanPiExtensions()
+  })
+
   ipcMain.handle('install-extension', async (_event, packageName: string) => {
     const result = await new Promise<{ success: boolean; stdout: string; stderr: string }>((resolve) => {
       const proc = spawn('pi', ['install', `npm:${packageName}`], { env: process.env, shell: true })
@@ -496,16 +506,108 @@ function registerIpcHandlers(): void {
     })
 
     if (result.success) {
-      // Restart sidecar so it picks up newly installed extensions/models
-      try {
-        await piSidecarHost?.restart()
-      } catch (err) {
-        console.error('Failed to restart sidecar after extension install:', err)
-      }
+      // Just notify the renderer to bust its cache and re-fetch.
+      // DON'T restart the sidecar — the running process already has the
+      // extension loaded in its session context. Restarting kills that state
+      // and the new process may not re-discover the extension in time.
+      console.log('[main] extension installed, telling renderer to refresh models')
+      mainWindow?.webContents.send('sidecar-ready')
     }
 
     return result
   })
+}
+
+// ─── Extension scanning helpers ────────────────────────────────────────────
+
+interface PiExtension {
+  name: string
+  version: string
+  description?: string
+  installedAt?: string
+}
+
+function scanPiExtensions(): PiExtension[] {
+  const extensions: PiExtension[] = []
+  const home = homedir()
+
+  // Scan ~/.pi/extensions/ if it exists
+  const piExtDir = path.join(home, '.pi', 'extensions')
+  try {
+    const entries = readdirSync(piExtDir)
+    for (const entry of entries) {
+      const entryPath = path.join(piExtDir, entry)
+      const stat = statSync(entryPath)
+      if (stat.isDirectory()) {
+        try {
+          const pkgJson = JSON.parse(readFileSync(path.join(entryPath, 'package.json'), 'utf-8'))
+          extensions.push({
+            name: pkgJson.name ?? entry,
+            version: pkgJson.version ?? 'unknown',
+            description: pkgJson.description,
+            installedAt: stat.mtime.toISOString(),
+          })
+        } catch {
+          extensions.push({ name: entry, version: 'unknown' })
+        }
+      }
+    }
+  } catch {
+    // Directory doesn't exist — try other methods
+  }
+
+  // Scan ~/.pi/node_modules/ for pi-extension keyword packages
+  const piNodeModules = path.join(home, '.pi', 'node_modules')
+  try {
+    const entries = readdirSync(piNodeModules)
+    for (const entry of entries) {
+      if (entry.startsWith('.')) continue
+      const entryPath = path.join(piNodeModules, entry)
+      const stat = statSync(entryPath)
+      if (stat.isDirectory()) {
+        try {
+          const pkgJson = JSON.parse(readFileSync(path.join(entryPath, 'package.json'), 'utf-8'))
+          const keywords = pkgJson.keywords ?? []
+          if (keywords.includes('pi-extension')) {
+            // Skip duplicates
+            if (!extensions.find((e) => e.name === pkgJson.name)) {
+              extensions.push({
+                name: pkgJson.name ?? entry,
+                version: pkgJson.version ?? 'unknown',
+                description: pkgJson.description,
+                installedAt: stat.mtime.toISOString(),
+              })
+            }
+          }
+        } catch {
+          // skip
+        }
+      }
+    }
+  } catch {
+    // Directory doesn't exist
+  }
+
+  // Try `pi list` command if available
+  try {
+    const result = execSync('pi list --json', { encoding: 'utf-8', timeout: 5000, env: process.env })
+    const list = JSON.parse(result)
+    if (Array.isArray(list)) {
+      for (const item of list) {
+        if (typeof item.name === 'string' && !extensions.find((e) => e.name === item.name)) {
+          extensions.push({
+            name: item.name,
+            version: item.version ?? 'unknown',
+            description: item.description,
+          })
+        }
+      }
+    }
+  } catch {
+    // pi list not available or failed
+  }
+
+  return extensions
 }
 
 // ─── Skill scanning helpers ────────────────────────────────────────────────

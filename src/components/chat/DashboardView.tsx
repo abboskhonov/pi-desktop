@@ -32,7 +32,7 @@ const QUICK_PROMPTS = [
 
 interface DashboardViewProps {
   sessions: SessionListItem[]
-  onStartSession: (text: string, model?: { id: string; provider: string }) => void
+  onStartSession: (text: string, images?: string[], model?: { id: string; provider: string }) => void
   onOpenSession: (path: string) => void
   activeWorkspacePath: string | null
 }

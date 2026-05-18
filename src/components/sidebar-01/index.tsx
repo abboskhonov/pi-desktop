@@ -15,6 +15,7 @@ export default function Sidebar01() {
   const [activeWorkspacePath, setActiveWorkspacePath] = React.useState<string | null>(null);
   const [activeView, setActiveView] = React.useState<'chat' | 'skills' | 'extensions'>('chat');
   const pendingPromptRef = React.useRef<string | null>(null);
+  const pendingImagesRef = React.useRef<string[] | null>(null);
   const pendingModelRef = React.useRef<{ id: string; provider: string } | null>(null);
 
   React.useEffect(() => {
@@ -23,8 +24,14 @@ export default function Sidebar01() {
         setActiveSessionPath(payload.sessionFile);
       }
       if (pendingPromptRef.current) {
-        window.electron.sendPrompt(pendingPromptRef.current).catch(console.error);
+        const imagePayloads = pendingImagesRef.current?.map((dataUrl) => {
+          const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+          if (!match) return { data: dataUrl, mimeType: "image/png" };
+          return { data: match[2]!, mimeType: match[1]! };
+        });
+        window.electron.sendPrompt(pendingPromptRef.current, undefined, imagePayloads).catch(console.error);
         pendingPromptRef.current = null;
+        pendingImagesRef.current = null;
       }
       if (pendingModelRef.current) {
         window.electron
@@ -75,16 +82,18 @@ export default function Sidebar01() {
             <ChatPane
               sessionPath={activeSessionPath}
               workspacePath={activeWorkspacePath}
-              onStartSession={(text, model) => {
+              onStartSession={(text, images, model) => {
                 if (!activeWorkspacePath) {
                   console.warn("No active workspace to start a session in");
                   return;
                 }
                 pendingPromptRef.current = text;
+                pendingImagesRef.current = images ?? null;
                 if (model) pendingModelRef.current = model;
                 window.electron.newSession(activeWorkspacePath).catch((err) => {
                   console.error("Failed to start session:", err);
                   pendingPromptRef.current = null;
+                  pendingImagesRef.current = null;
                   pendingModelRef.current = null;
                 });
               }}

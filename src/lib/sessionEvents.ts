@@ -14,6 +14,8 @@ export interface ChatMessage {
     streaming?: boolean;
   }>;
   streaming?: boolean;
+  /** Base64 data URLs for attached images */
+  images?: string[];
 }
 
 export interface SessionEvent {
@@ -40,6 +42,7 @@ export function applySessionEvent(
             id: `u-${crypto.randomUUID()}`,
             role: "user",
             text: contentToText(msg.content),
+            images: contentToImages(msg.content),
           },
         ];
       }
@@ -170,6 +173,25 @@ function contentToText(content: unknown): string {
       .trim();
   }
   return "";
+}
+
+function contentToImages(content: unknown): string[] | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const images: string[] = [];
+  for (const part of content) {
+    if (
+      part &&
+      typeof part === "object" &&
+      "type" in part &&
+      (part as { type?: string }).type === "image" &&
+      "data" in part &&
+      "mimeType" in part
+    ) {
+      const p = part as { data: string; mimeType: string };
+      images.push(`data:${p.mimeType};base64,${p.data}`);
+    }
+  }
+  return images.length > 0 ? images : undefined;
 }
 
 function resultText(result: unknown): string {

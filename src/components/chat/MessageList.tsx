@@ -89,29 +89,29 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
         <div className="flex flex-col">
           {messages.map((msg, i) => {
             const prev = messages[i - 1];
+            const isGrouped = prev && prev.role === msg.role;
             // Extra gap when switching between user and agent
             const gapClass =
               prev && prev.role !== msg.role
                 ? "mt-6"
-                : prev && prev.role === msg.role
-                  ? "mt-1"
+                : isGrouped
+                  ? "mt-2"
                   : "";
 
             return (
               <div key={msg.id} className={gapClass}>
-                <Message msg={msg} />
+                <Message msg={msg} isGrouped={isGrouped} />
               </div>
             );
           })}
 
           {/* Streaming indicator — left-aligned like an agent message */}
           {isStreaming && (
-            <div className="mt-6 flex justify-start">
-              <div className="flex items-center gap-2 py-3">
+            <div className="mt-3 flex justify-start">
+              <div className="flex items-center gap-1.5 py-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "0ms" }} />
                 <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "200ms" }} />
                 <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "400ms" }} />
-                <span className="text-[12px] text-muted-foreground/40 ml-1">thinking</span>
               </div>
             </div>
           )}

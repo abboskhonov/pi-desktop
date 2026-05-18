@@ -294,19 +294,22 @@ async function handleCommand(cmd: SidecarCommand): Promise<void> {
 
     case 'prompt': {
       if (!state) return
-      await state.session.prompt(cmd.text)
+      const promptImages = cmd.images?.map((img) => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType }))
+      await state.session.prompt(cmd.text, { images: promptImages })
       break
     }
 
     case 'steer': {
       if (!state) return
-      await state.session.steer(cmd.text)
+      const steerImages = cmd.images?.map((img) => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType }))
+      await state.session.steer(cmd.text, steerImages)
       break
     }
 
     case 'follow_up': {
       if (!state) return
-      await state.session.followUp(cmd.text)
+      const followUpImages = cmd.images?.map((img) => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType }))
+      await state.session.followUp(cmd.text, followUpImages)
       break
     }
 
@@ -392,6 +395,9 @@ async function handleCommand(cmd: SidecarCommand): Promise<void> {
         const usageCost = m.usage?.cost
         cost += typeof usageCost === 'number' ? usageCost : (usageCost as { total?: number } | undefined)?.total ?? 0
       }
+      const sessionModel = state.session.model as
+        | { contextWindow?: number }
+        | undefined
       send({
         type: 'stats_result',
         requestId: cmd.requestId,
@@ -402,6 +408,7 @@ async function handleCommand(cmd: SidecarCommand): Promise<void> {
           cacheWriteTokens,
           cost,
           contextUsagePercent: state.session.getContextUsage()?.percent ?? null,
+          contextWindow: sessionModel?.contextWindow ?? null,
           sessionFile: state.session.sessionFile ?? null,
           sessionId: state.session.sessionId ?? null,
           isStreaming:

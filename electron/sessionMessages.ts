@@ -9,6 +9,7 @@ export interface ChatMessage {
   thinking?: string
   modelName?: string
   toolCards?: ToolCard[]
+  images?: string[]
 }
 
 export interface ToolCard {
@@ -66,6 +67,7 @@ export async function readSessionMessages(sessionPath: string): Promise<SessionM
                 id: id || `u-${timestamp}`,
                 role: 'user',
                 text: contentToText(msg.content),
+                images: contentToImages(msg.content),
                 timestamp,
               })
             } else if (role === 'assistant') {
@@ -172,6 +174,25 @@ function contentToText(content: unknown): string {
       .trim()
   }
   return ''
+}
+
+function contentToImages(content: unknown): string[] | undefined {
+  if (!Array.isArray(content)) return undefined
+  const images: string[] = []
+  for (const part of content) {
+    if (
+      part &&
+      typeof part === 'object' &&
+      'type' in part &&
+      (part as { type?: string }).type === 'image' &&
+      'data' in part &&
+      'mimeType' in part
+    ) {
+      const p = part as { data: string; mimeType: string }
+      images.push(`data:${p.mimeType};base64,${p.data}`)
+    }
+  }
+  return images.length > 0 ? images : undefined
 }
 
 function assistantText(content: unknown): string {

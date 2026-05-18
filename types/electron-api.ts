@@ -82,14 +82,15 @@ export interface ElectronAPI {
       }>
       thinking?: string
       modelName?: string
+      images?: string[]
     }>
     sessionName: string | null
   }>
 
   // Chat / Agent
-  sendPrompt: (text: string, contextPrefix?: string) => Promise<void>
-  sendSteer: (text: string, contextPrefix?: string) => Promise<void>
-  sendFollowUp: (text: string, contextPrefix?: string) => Promise<void>
+  sendPrompt: (text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>
+  sendSteer: (text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>
+  sendFollowUp: (text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>
   abortSession: () => Promise<void>
   getModels: () => Promise<Array<{ id: string; name: string; provider: string; reasoning: boolean; contextWindow: number }>>
   setModel: (provider: string, modelId: string) => Promise<void>
@@ -104,6 +105,8 @@ export interface ElectronAPI {
 
   searchExtensions: (query: string) => Promise<{ packages: Array<{ name: string; description: string; version: string; keywords?: string[] }> }>
   installExtension: (packageName: string) => Promise<{ success: boolean; stdout: string; stderr: string }>
+
+  getInstalledExtensions: () => Promise<Array<{ name: string; version: string; description?: string; installedAt?: string }>>
 
   getSessionStats: () => Promise<Record<string, unknown>>
 
@@ -121,6 +124,8 @@ export interface ElectronAPI {
   onSessionReady: (callback: (payload: SessionReadyPayload) => void) => () => void
   onSessionEvent: (callback: (event: Record<string, unknown>) => void) => () => void
   onSessionError: (callback: (err: { message: string; code?: string; _sessionFile?: string | null; _sessionId?: string | null }) => void) => () => void
+
+  onSidecarReady: (callback: () => void) => () => void
 }
 
 declare global {

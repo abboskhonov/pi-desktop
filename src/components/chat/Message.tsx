@@ -24,6 +24,8 @@ export interface ChatMessage {
   modelName?: string;
   toolCalls?: ToolCall[];
   streaming?: boolean;
+  /** Base64 data URLs for attached images */
+  images?: string[];
 }
 
 /* ── Inline formatters ─────────────────────────────────────────────── */
@@ -140,16 +142,16 @@ const FormattedText = React.memo(function FormattedText({ text }: { text: string
 const ThinkingBlock = React.memo(function ThinkingBlock({ text }: { text: string }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <div className="my-2">
+    <div className="my-1.5">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+        className="flex items-center gap-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
       >
-        <IconChevronRight className={cn("h-3 w-3 transition-transform duration-150", open && "rotate-90")} />
+        <IconChevronRight className={cn("h-3 w-3 transition-transform", open && "rotate-90")} />
         Thinking
       </button>
       {open && (
-        <div className="mt-1.5 border-l-2 border-border/40 pl-3 text-[12px] text-muted-foreground/70 leading-relaxed whitespace-pre-wrap break-words">
+        <div className="mt-1.5 pl-3 text-[12px] text-muted-foreground/50 leading-relaxed whitespace-pre-wrap break-words">
           {text}
         </div>
       )}
@@ -171,19 +173,19 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px]",
+        "inline-flex items-center gap-1.5 text-[11px]",
         call.isError
-          ? "border-destructive/20 bg-destructive/5 text-destructive"
-          : "border-border/40 bg-muted/30 text-muted-foreground"
+          ? "text-destructive/70"
+          : "text-muted-foreground/50"
       )}
     >
       {call.isError ? (
         <IconAlertCircle className="h-3 w-3" />
       ) : (
-        <IconTerminal2 className="h-3 w-3 opacity-60" />
+        <IconTerminal2 className="h-3 w-3" />
       )}
       <span className="capitalize">{call.toolName}</span>
-      {display && <span className="truncate max-w-[200px] opacity-60">{display}</span>}
+      {display && <span className="truncate max-w-[180px] opacity-60">{display}</span>}
     </div>
   );
 }
@@ -192,7 +194,7 @@ function ToolCallRow({ call }: { call: ToolCall }) {
 
 function StreamingDots() {
   return (
-    <div className="flex items-center gap-1 py-3">
+    <div className="flex items-center gap-1 py-2">
       <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "0ms" }} />
       <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "200ms" }} />
       <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "400ms" }} />
@@ -234,13 +236,30 @@ function areMessagesEqual(prev: ChatMessage, next: ChatMessage): boolean {
 
 /* ── Message component ───────────────────────────────────────────── */
 
-export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }) {
+export const Message = React.memo(function Message({ msg, isGrouped }: { msg: ChatMessage; isGrouped?: boolean }) {
   /* ── User message ────────────────────────────────────────────── */
   if (msg.role === "user") {
     return (
       <div className="flex justify-end py-2">
-        <div className="max-w-[78%] rounded-[20px] bg-muted px-5 py-3.5 text-[15px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
-          {msg.text}
+        <div className="max-w-[78%] flex flex-col gap-2 items-end">
+          {msg.images && msg.images.length > 0 && (
+            <div className="flex flex-wrap gap-2 justify-end">
+              {msg.images.map((src, i) => (
+                <img
+                  key={i}
+                  src={src}
+                  alt=""
+                  className="rounded-xl max-h-[200px] max-w-[200px] object-cover border border-border/30"
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+          {msg.text && (
+            <div className="rounded-[20px] bg-muted px-5 py-3.5 text-[15px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
+              {msg.text}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -262,14 +281,16 @@ export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }
     <div className="flex justify-start py-2">
       <div className="max-w-[88%]">
         {/* Agent icon + name header */}
-        <div className="flex items-center gap-2 mb-1.5">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-            <IconSparkles className="h-3.5 w-3.5 text-primary/70" />
+        {!isGrouped && (
+          <div className="flex items-center gap-2 mb-1.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+              <IconSparkles className="h-3.5 w-3.5 text-primary/70" />
+            </div>
+            <span className="text-[11px] text-muted-foreground/50 font-medium">
+              {msg.modelName ?? "Assistant"}
+            </span>
           </div>
-          <span className="text-[11px] text-muted-foreground/50 font-medium">
-            {msg.modelName ?? "Assistant"}
-          </span>
-        </div>
+        )}
 
         {/* Tool calls as subtle pills */}
         {msg.toolCalls && msg.toolCalls.length > 0 && (
@@ -283,14 +304,7 @@ export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }
         {/* Thinking block */}
         {msg.thinking && <ThinkingBlock text={msg.thinking} />}
 
-        {/* Response divider between tools and text */}
-        {msg.toolCalls && msg.toolCalls.length > 0 && msg.text && (
-          <div className="flex items-center gap-2 my-2">
-            <div className="h-px flex-1 bg-border/20" />
-            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/30">Response</span>
-            <div className="h-px flex-1 bg-border/20" />
-          </div>
-        )}
+
 
         {/* Text content — plain during streaming, formatted when done */}
         {msg.text && (
@@ -308,4 +322,4 @@ export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }
       </div>
     </div>
   );
-}, (prevProps, nextProps) => areMessagesEqual(prevProps.msg, nextProps.msg));
+}, (prevProps, nextProps) => areMessagesEqual(prevProps.msg, nextProps.msg) && prevProps.isGrouped === nextProps.isGrouped);

@@ -11,7 +11,6 @@ import {
   IconChevronDown,
   IconPlus,
   IconBolt,
-  IconGitBranch,
   IconFolder,
   IconSparkles,
   IconPuzzle,
@@ -24,7 +23,6 @@ import type { WorkspaceInfo, SessionListItem } from "../../../types/electron-api
 
 const navItems = [
   { id: "new-session", title: "New Session", icon: IconPlus, active: true },
-  { id: "git", title: "Git", icon: IconGitBranch },
   { id: "skills", title: "Skills", icon: IconSparkles },
   { id: "extensions", title: "Extensions", icon: IconPuzzle },
 ];
@@ -57,7 +55,6 @@ export function NavHeader({
   const activeNav = React.useMemo(() => {
     if (activeView === "skills") return "skills";
     if (activeView === "extensions") return "extensions";
-    if (activeView === "git") return "git";
     return "new-session";
   }, [activeView]);
   const isCollapsed = state === "collapsed";
@@ -106,7 +103,7 @@ export function NavHeader({
               key={item.id}
               onClick={() => {
                 if (item.id === "new-session") onNewSession();
-                if (item.id === "skills" || item.id === "extensions" || item.id === "git") {
+                if (item.id === "skills" || item.id === "extensions") {
                   onNavigate?.(item.id);
                 }
               }}
@@ -207,7 +204,7 @@ export function NavHeader({
               key={item.id}
               onClick={() => {
                 if (item.id === "new-session") onNewSession();
-                if (item.id === "skills" || item.id === "extensions" || item.id === "git") {
+                if (item.id === "skills" || item.id === "extensions") {
                   onNavigate?.(item.id);
                 }
               }}

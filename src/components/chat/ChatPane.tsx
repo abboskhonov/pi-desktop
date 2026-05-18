@@ -7,7 +7,7 @@ import { NewSessionPane } from "./NewSessionPane";
 interface ChatPaneProps {
   sessionPath: string | null;
   workspacePath?: string | null;
-  onStartSession?: (text: string, model?: { id: string; provider: string }) => void;
+  onStartSession?: (text: string, images?: string[], model?: { id: string; provider: string }) => void;
 }
 
 export function ChatPane({ sessionPath, workspacePath, onStartSession }: ChatPaneProps) {

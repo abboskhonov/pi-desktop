@@ -41,6 +41,7 @@ const api: ElectronAPI = {
       }>
       thinking?: string
       modelName?: string
+      images?: string[]
     }>
     sessionName: string | null
   }> => ipcRenderer.invoke('get-session-messages', path),
@@ -53,12 +54,12 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('pin-session', path, pinned),
 
   // Chat / Agent
-  sendPrompt: (text: string, contextPrefix?: string): Promise<void> =>
-    ipcRenderer.invoke('send-prompt', text, contextPrefix),
-  sendSteer: (text: string, contextPrefix?: string): Promise<void> =>
-    ipcRenderer.invoke('send-steer', text, contextPrefix),
-  sendFollowUp: (text: string, contextPrefix?: string): Promise<void> =>
-    ipcRenderer.invoke('send-follow-up', text, contextPrefix),
+  sendPrompt: (text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>): Promise<void> =>
+    ipcRenderer.invoke('send-prompt', text, contextPrefix, images),
+  sendSteer: (text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>): Promise<void> =>
+    ipcRenderer.invoke('send-steer', text, contextPrefix, images),
+  sendFollowUp: (text: string, contextPrefix?: string, images?: Array<{ data: string; mimeType: string }>): Promise<void> =>
+    ipcRenderer.invoke('send-follow-up', text, contextPrefix, images),
   abortSession: (): Promise<void> => ipcRenderer.invoke('abort-session'),
   getModels: (): Promise<Array<{ id: string; name: string; provider: string; reasoning: boolean; contextWindow: number }>> =>
     ipcRenderer.invoke('get-models'),
@@ -80,6 +81,9 @@ const api: ElectronAPI = {
 
   installExtension: (packageName: string): Promise<{ success: boolean; stdout: string; stderr: string }> =>
     ipcRenderer.invoke('install-extension', packageName),
+
+  getInstalledExtensions: (): Promise<Array<{ name: string; version: string; description?: string; installedAt?: string }>> =>
+    ipcRenderer.invoke('get-installed-extensions'),
 
   getSessionStats: (): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke('get-session-stats'),
@@ -126,6 +130,14 @@ const api: ElectronAPI = {
     ipcRenderer.on('session-error', handler)
     return () => {
       ipcRenderer.removeListener('session-error', handler)
+    }
+  },
+
+  onSidecarReady: (callback: () => void): (() => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('sidecar-ready', handler)
+    return () => {
+      ipcRenderer.removeListener('sidecar-ready', handler)
     }
   },
 }

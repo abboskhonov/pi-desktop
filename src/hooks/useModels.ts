@@ -47,6 +47,15 @@ export function useModels() {
     return () => window.removeEventListener(MODELS_REFRESH_EVENT, handler);
   }, []);
 
+  // Also refresh when sidecar comes back up (e.g. after extension install + restart)
+  React.useEffect(() => {
+    const unsub = window.electron.onSidecarReady(() => {
+      console.log('[useModels] sidecar ready — refreshing models');
+      setTick((t) => t + 1);
+    });
+    return unsub;
+  }, []);
+
   // Keep a ref to the latest selectedModelId so the async fetch callback
   // always sees the current value without adding it to effect deps.
   const selectedModelIdRef = React.useRef(selectedModelId);

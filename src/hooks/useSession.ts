@@ -17,7 +17,7 @@ interface UseSessionResult {
   isLoading: boolean;
   input: string;
   setInput: (v: string) => void;
-  sendMessage: (text?: string) => void;
+  sendMessage: (text?: string, images?: string[]) => void;
   abort: () => void;
   isStreaming: boolean;
   error: string | null;
@@ -141,6 +141,7 @@ export function useSession(sessionPath: string | null): UseSessionResult {
             timestamp: m.timestamp,
             thinking: m.thinking,
             modelName: m.modelName,
+            images: m.images,
             toolCalls: m.toolCards?.map((c) => ({
               toolCallId: c.toolCallId,
               toolName: c.toolName,
@@ -304,15 +305,21 @@ export function useSession(sessionPath: string | null): UseSessionResult {
   }, [sessionPath, currentModel, flushBuffer, scheduleFlush]);
 
   const sendMessage = React.useCallback(
-    (overrideText?: string) => {
+    (overrideText?: string, images?: string[]) => {
       const text = (overrideText ?? inputRef.current).trim();
-      if (!text) return;
+      if (!text && !images?.length) return;
 
       setInput("");
       inputRef.current = "";
       setError(null);
 
-      window.electron.sendPrompt(text).catch((err) => {
+      const imagePayloads = images?.map((dataUrl) => {
+        const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+        if (!match) return { data: dataUrl, mimeType: "image/png" };
+        return { data: match[2]!, mimeType: match[1]! };
+      });
+
+      window.electron.sendPrompt(text, undefined, imagePayloads).catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
       });
     },

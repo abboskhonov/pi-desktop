@@ -11,9 +11,9 @@ const MAX_RESTARTS = 3
 
 export type SidecarCommand =
   | { type: 'start_session'; cwd: string; sessionFile?: string; requestId?: string; workspaceTrusted?: boolean }
-  | { type: 'prompt'; text: string; contextPrefix?: string }
-  | { type: 'steer'; text: string; contextPrefix?: string }
-  | { type: 'follow_up'; text: string; contextPrefix?: string }
+  | { type: 'prompt'; text: string; contextPrefix?: string; images?: Array<{ data: string; mimeType: string }> }
+  | { type: 'steer'; text: string; contextPrefix?: string; images?: Array<{ data: string; mimeType: string }> }
+  | { type: 'follow_up'; text: string; contextPrefix?: string; images?: Array<{ data: string; mimeType: string }> }
   | { type: 'abort' }
   | { type: 'set_model'; provider: string; modelId: string }
   | { type: 'set_thinking'; level: string }
@@ -86,21 +86,32 @@ export class PiSidecarHost {
   private child: SidecarProcess | null = null
   private readonly onMessage: (msg: SidecarMessage) => void
   private readonly onCrash: () => void
+  private readonly onReady: () => void
   private readonly pendingRequests = new Map<string, PendingRequest>()
   private restartCount = 0
   private stopping = false
   private _stdoutBuf = ''
   private _stderrBuf = ''
+  private _readyPromise: Promise<void> | null = null
+  private _readyResolve: (() => void) | null = null
 
-  constructor(opts: { onMessage: (msg: SidecarMessage) => void; onCrash: () => void }) {
+  constructor(opts: { onMessage: (msg: SidecarMessage) => void; onCrash: () => void; onReady?: () => void }) {
     this.onMessage = opts.onMessage
     this.onCrash = opts.onCrash
+    this.onReady = opts.onReady ?? (() => {})
   }
 
   start(): void {
     this.stopping = false
     this.restartCount = 0
+    this._readyPromise = new Promise((resolve) => {
+      this._readyResolve = resolve
+    })
     this.spawnChild()
+  }
+
+  ready(): Promise<void> {
+    return this._readyPromise ?? Promise.resolve()
   }
 
   private spawnChild(): void {
@@ -143,6 +154,13 @@ export class PiSidecarHost {
 
     child.on('message', (msg: unknown) => {
       const message = msg as SidecarMessage
+      if (message.type === 'ready') {
+        if (this._readyResolve) {
+          this._readyResolve()
+          this._readyResolve = null
+        }
+        this.onReady()
+      }
       const requestId = 'requestId' in message ? message.requestId : undefined
       if (requestId) {
         const pending = this.pendingRequests.get(requestId)
@@ -160,9 +178,18 @@ export class PiSidecarHost {
       this.onMessage(message)
     })
 
+    // Capture the child reference so the exit handler only acts for THIS child.
+    // Without this, a restart() race causes the old child's exit to clobber the
+    // new child (this.child = null) and clear pendingRequests.
+    const childRef = child
     ;(child as unknown as { on(event: 'exit', listener: (code: number | null) => void): void }).on(
       'exit',
       (code) => {
+        // If a new child already replaced this one, ignore.
+        if (this.child !== childRef) {
+          return
+        }
+
         this.child = null
         for (const pending of this.pendingRequests.values()) {
           clearTimeout(pending.timeout)
@@ -226,9 +253,16 @@ export class PiSidecarHost {
 
   async restart(): Promise<void> {
     await this.stop()
+    // Force-null the child reference so any requests during the restart
+    // window fail cleanly with "not running" instead of hitting a dying process.
+    this.child = null
     this.stopping = false
     this.restartCount = 0
+    this._readyPromise = new Promise((resolve) => {
+      this._readyResolve = resolve
+    })
     this.spawnChild()
+    await this.ready()
   }
 
   stop(): Promise<void> {

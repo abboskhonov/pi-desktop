@@ -4,16 +4,18 @@
   "productName": "Pi Desktop",
   "asar": true,
   "directories": {
-    "output": "release/${version}"
+    "output": "release/${version}",
+    "buildResources": "build"
   },
-  "files": ["out"],
+  "icon": "build/icon.png",
+  "files": ["out", "build"],
   "mac": {
     "category": "public.app-category.utilities",
     "target": ["dmg"]
   },
   "linux": {
     "category": "Utility",
-    "target": ["AppImage"]
+    "target": ["AppImage", "rpm"]
   },
   "win": {
     "target": ["nsis"]
