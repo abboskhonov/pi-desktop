@@ -1,5 +1,11 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import {
+  IconSparkles,
+  IconChevronRight,
+  IconTerminal2,
+  IconAlertCircle,
+} from "@tabler/icons-react";
 
 interface ToolCall {
   toolCallId: string;
@@ -20,6 +26,8 @@ export interface ChatMessage {
   streaming?: boolean;
 }
 
+/* ── Inline formatters ─────────────────────────────────────────────── */
+
 function InlineCode({ children }: { children: React.ReactNode }) {
   return (
     <code className="rounded-md bg-muted/70 px-1.5 py-0.5 text-[13px] font-mono text-foreground/90">
@@ -27,51 +35,6 @@ function InlineCode({ children }: { children: React.ReactNode }) {
     </code>
   );
 }
-
-function ToolCallRow({ call }: { call: ToolCall }) {
-  const filePath = (call.args.path as string) || (call.args.file as string);
-  const command = call.args.command as string;
-  const display = filePath
-    ? filePath.split("/").slice(-2).join("/")
-    : command
-      ? command.slice(0, 60)
-      : call.toolName;
-
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 py-1 text-[13px]",
-        call.isError ? "text-destructive" : "text-muted-foreground"
-      )}
-    >
-      <span className="text-xs">▸</span>
-      <span className="capitalize">{call.toolName}</span>
-      {display && (
-        <span className="truncate text-xs opacity-70">{display}</span>
-      )}
-    </div>
-  );
-}
-
-const ThinkingBlock = React.memo(function ThinkingBlock({ text }: { text: string }) {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <div className="my-2">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-      >
-        <span className={cn("transition-transform", open && "rotate-90")}>▶</span>
-        Thinking
-      </button>
-      {open && (
-        <div className="mt-1 rounded-md border border-border/30 bg-muted/20 p-2 text-[12px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
-          {text}
-        </div>
-      )}
-    </div>
-  );
-});
 
 const InlineFormat = React.memo(function InlineFormat({ text }: { text: string }) {
   const parts: Array<{ type: "text" | "code" | "bold" | "link"; content: string; href?: string }> = [];
@@ -172,6 +135,73 @@ const FormattedText = React.memo(function FormattedText({ text }: { text: string
   );
 });
 
+/* ── Thinking block ───────────────────────────────────────────────── */
+
+const ThinkingBlock = React.memo(function ThinkingBlock({ text }: { text: string }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="my-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+      >
+        <IconChevronRight className={cn("h-3 w-3 transition-transform duration-150", open && "rotate-90")} />
+        Thinking
+      </button>
+      {open && (
+        <div className="mt-1.5 border-l-2 border-border/40 pl-3 text-[12px] text-muted-foreground/70 leading-relaxed whitespace-pre-wrap break-words">
+          {text}
+        </div>
+      )}
+    </div>
+  );
+});
+
+/* ── Tool call row ───────────────────────────────────────────────── */
+
+function ToolCallRow({ call }: { call: ToolCall }) {
+  const filePath = (call.args.path as string) || (call.args.file as string);
+  const command = call.args.command as string;
+  const display = filePath
+    ? filePath.split("/").slice(-2).join("/")
+    : command
+      ? command.slice(0, 60)
+      : call.toolName;
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[12px]",
+        call.isError
+          ? "border-destructive/20 bg-destructive/5 text-destructive"
+          : "border-border/40 bg-muted/30 text-muted-foreground"
+      )}
+    >
+      {call.isError ? (
+        <IconAlertCircle className="h-3 w-3" />
+      ) : (
+        <IconTerminal2 className="h-3 w-3 opacity-60" />
+      )}
+      <span className="capitalize">{call.toolName}</span>
+      {display && <span className="truncate max-w-[200px] opacity-60">{display}</span>}
+    </div>
+  );
+}
+
+/* ── Streaming dots ──────────────────────────────────────────────── */
+
+function StreamingDots() {
+  return (
+    <div className="flex items-center gap-1 py-3">
+      <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "0ms" }} />
+      <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "200ms" }} />
+      <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "400ms" }} />
+    </div>
+  );
+}
+
+/* ── Equality check ──────────────────────────────────────────────── */
+
 function areMessagesEqual(prev: ChatMessage, next: ChatMessage): boolean {
   if (prev.id !== next.id) return false;
   if (prev.role !== next.role) return false;
@@ -202,48 +232,69 @@ function areMessagesEqual(prev: ChatMessage, next: ChatMessage): boolean {
   return true;
 }
 
+/* ── Message component ───────────────────────────────────────────── */
+
 export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }) {
+  /* ── User message ────────────────────────────────────────────── */
   if (msg.role === "user") {
     return (
-      <div className="py-4">
-        <div className="max-w-3xl mx-auto">
-          <p className="text-[15px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
-            {msg.text}
-          </p>
+      <div className="flex justify-end py-2">
+        <div className="max-w-[78%] rounded-[20px] bg-muted px-5 py-3.5 text-[15px] leading-relaxed text-foreground/90 whitespace-pre-wrap break-words">
+          {msg.text}
         </div>
       </div>
     );
   }
 
+  /* ── System message ──────────────────────────────────────────── */
+  if (msg.role === "system") {
+    return (
+      <div className="flex justify-center py-2">
+        <span className="text-[11px] text-muted-foreground/40 uppercase tracking-wider">
+          {msg.text}
+        </span>
+      </div>
+    );
+  }
+
+  /* ── Assistant message ───────────────────────────────────────── */
   return (
-    <div className="py-1.5">
-      <div className="max-w-3xl mx-auto">
-        {/* Tool calls as compact rows */}
+    <div className="flex justify-start py-2">
+      <div className="max-w-[88%]">
+        {/* Agent icon + name header */}
+        <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
+            <IconSparkles className="h-3.5 w-3.5 text-primary/70" />
+          </div>
+          <span className="text-[11px] text-muted-foreground/50 font-medium">
+            {msg.modelName ?? "Assistant"}
+          </span>
+        </div>
+
+        {/* Tool calls as subtle pills */}
         {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div className="mb-1 space-y-0">
+          <div className="flex flex-wrap gap-1.5 mb-2">
             {msg.toolCalls.map((call) => (
               <ToolCallRow key={call.toolCallId} call={call} />
             ))}
           </div>
         )}
 
-        {/* Thinking */}
+        {/* Thinking block */}
         {msg.thinking && <ThinkingBlock text={msg.thinking} />}
 
-        {/* Response divider */}
+        {/* Response divider between tools and text */}
         {msg.toolCalls && msg.toolCalls.length > 0 && msg.text && (
-          <div className="flex items-center gap-3 my-3">
-            <div className="flex-1 h-px bg-border/40" />
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground/50">
-              Response
-            </span>
-            <div className="flex-1 h-px bg-border/40" />
+          <div className="flex items-center gap-2 my-2">
+            <div className="h-px flex-1 bg-border/20" />
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground/30">Response</span>
+            <div className="h-px flex-1 bg-border/20" />
           </div>
         )}
 
-        {/* Text content — render plain text while streaming to avoid regex cost on every token */}
+        {/* Text content — plain during streaming, formatted when done */}
         {msg.text && (
-          <div className="text-[14px] leading-[1.7] text-foreground/85 whitespace-pre-wrap break-words">
+          <div className="text-[15px] leading-[1.7] text-foreground/85 whitespace-pre-wrap break-words">
             {msg.streaming ? (
               <span>{msg.text}</span>
             ) : (
@@ -251,6 +302,9 @@ export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }
             )}
           </div>
         )}
+
+        {/* Streaming indicator (no text yet) */}
+        {msg.streaming && !msg.text && <StreamingDots />}
       </div>
     </div>
   );

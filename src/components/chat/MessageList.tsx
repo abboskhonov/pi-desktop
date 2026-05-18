@@ -15,7 +15,6 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
   const rafRef = React.useRef<number>(0);
 
   // ── Initial snap: hard scroll to bottom on first messages of a session ──
-  // Resets when messages clear (session switch) so the next session also snaps.
   React.useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -25,7 +24,6 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
       return;
     }
 
-    // Snap once when the first messages arrive for this session
     if (!initialSnapRef.current) {
       container.scrollTop = container.scrollHeight;
       initialSnapRef.current = true;
@@ -33,14 +31,13 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
   }, [messages.length]);
 
   // ── Streaming scroll: batched smooth scroll to bottom ──
-  // Uses requestAnimationFrame so rapid tokens don't queue overlapping scrolls.
   React.useEffect(() => {
     if (!isStreaming) return;
     const container = containerRef.current;
     if (!container) return;
 
     const nearBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+      container.scrollHeight - container.scrollTop - container.clientHeight < 120;
     if (!nearBottom) return;
 
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -61,7 +58,7 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
 
     const onScroll = () => {
       const nearBottom =
-        el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+        el.scrollHeight - el.scrollTop - el.clientHeight < 120;
       setShowScrollDown(!nearBottom);
     };
 
@@ -69,7 +66,7 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  // Empty state: include isStreaming so we don't show placeholder while waiting
+  // Empty state
   if (messages.length === 0 && !isLoading && !isStreaming) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -85,35 +82,41 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
 
   return (
     <div className="relative h-full">
-      <div ref={containerRef} className="h-full overflow-y-auto no-scrollbar pb-6">
+      <div
+        ref={containerRef}
+        className="h-full overflow-y-auto no-scrollbar pb-8 pt-4 px-5"
+      >
         <div className="flex flex-col">
           {messages.map((msg, i) => {
             const prev = messages[i - 1];
-            const showDivider = prev && prev.role !== msg.role && msg.role === "assistant";
+            // Extra gap when switching between user and agent
+            const gapClass =
+              prev && prev.role !== msg.role
+                ? "mt-6"
+                : prev && prev.role === msg.role
+                  ? "mt-1"
+                  : "";
 
             return (
-              <div key={msg.id}>
-                {showDivider && (
-                  <div className="max-w-3xl mx-auto">
-                    <div className="h-px bg-border/20 my-1" />
-                  </div>
-                )}
+              <div key={msg.id} className={gapClass}>
                 <Message msg={msg} />
               </div>
             );
           })}
 
-          {/* Streaming indicator */}
+          {/* Streaming indicator — left-aligned like an agent message */}
           {isStreaming && (
-            <div className="py-3 max-w-3xl mx-auto">
-              <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                Pi is thinking...
+            <div className="mt-6 flex justify-start">
+              <div className="flex items-center gap-2 py-3">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "0ms" }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "200ms" }} />
+                <span className="h-1.5 w-1.5 rounded-full bg-primary/50 animate-pulse" style={{ animationDelay: "400ms" }} />
+                <span className="text-[12px] text-muted-foreground/40 ml-1">thinking</span>
               </div>
             </div>
           )}
 
-          <div ref={bottomRef} className="h-4" />
+          <div ref={bottomRef} className="h-6" />
         </div>
       </div>
 
@@ -121,7 +124,7 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
       {showScrollDown && (
         <button
           onClick={() => bottomRef.current?.scrollIntoView({ behavior: "smooth" })}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-background/90 border border-border/50 px-3 py-1.5 text-[11px] text-muted-foreground shadow-sm hover:text-foreground transition-colors"
+          className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full bg-background/90 border border-border/50 px-3.5 py-1.5 text-[11px] text-muted-foreground shadow-sm hover:text-foreground transition-colors backdrop-blur-sm"
         >
           <span>↓</span> Scroll to bottom
         </button>

@@ -52,34 +52,37 @@ export function ChatPane({ sessionPath, workspacePath, onStartSession }: ChatPan
         </div>
       )}
 
-      {/* Messages area */}
-      <div className="flex-1 overflow-hidden">
-        {isLoading && messages.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              Loading session...
+      {/* Shared centered column: messages + composer same width */}
+      <div className="flex-1 min-h-0 flex flex-col max-w-3xl mx-auto w-full">
+        {/* Messages area */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {isLoading && messages.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                Loading session...
+              </div>
             </div>
-          </div>
-        ) : (
-          <MessageList
-            messages={messages}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-          />
-        )}
-      </div>
+          ) : (
+            <MessageList
+              messages={messages}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+            />
+          )}
+        </div>
 
-      {/* Composer */}
-      <Composer
-        input={input}
-        onInputChange={setInput}
-        onSend={sendMessage}
-        isStreaming={isStreaming}
-        onStop={abort}
-        disabled={!sessionPath}
-        currentModel={currentModel}
-      />
+        {/* Composer */}
+        <Composer
+          input={input}
+          onInputChange={setInput}
+          onSend={sendMessage}
+          isStreaming={isStreaming}
+          onStop={abort}
+          disabled={!sessionPath}
+          currentModel={currentModel}
+        />
+      </div>
     </div>
   );
 }

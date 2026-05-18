@@ -70,7 +70,7 @@ export const Composer = React.memo(function Composer({
 
   return (
     <div className="shrink-0 bg-gradient-to-t from-background via-background/95 to-transparent">
-      <div className="max-w-3xl mx-auto py-3">
+      <div className="py-3">
         {/* Composer card */}
         <div className="flex min-h-[120px] flex-col rounded-2xl cursor-text bg-card border border-border">
           <div className="flex-1 relative overflow-y-auto max-h-[258px]">
