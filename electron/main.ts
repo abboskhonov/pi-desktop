@@ -10,7 +10,9 @@ import type { SidecarMessage, SessionReadyPayload } from './piSidecarHost'
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 
 // ── Linux GPU fixes ─────────────────────────────────────────────────────────
-if (process.platform === 'linux') {
+// Only disable hardware acceleration when explicitly requested.
+// Software rendering makes the UI feel sluggish on most modern Linux GPUs.
+if (process.platform === 'linux' && process.env.PI_DISABLE_GPU) {
   app.disableHardwareAcceleration()
   app.commandLine.appendSwitch('disable-gpu-sandbox')
   app.commandLine.appendSwitch('disable-software-rasterizer')
