@@ -11,13 +11,36 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const [showScrollDown, setShowScrollDown] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const prevMessageCount = React.useRef(0);
 
-  // Auto-scroll to bottom on new messages
+  // LayoutEffect: snap to bottom BEFORE paint on initial mount or session switch
+  // This prevents the flash of seeing the top of the message list
+  React.useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // If this is the first render with messages (or after a session switch),
+    // set scrollTop directly — no animation, happens before paint
+    if (messages.length > 0 && prevMessageCount.current === 0) {
+      container.scrollTop = container.scrollHeight;
+    }
+    prevMessageCount.current = messages.length;
+  }, [messages.length]);
+
+  // Effect: smooth scroll for new incoming messages while streaming
   React.useEffect(() => {
-    if (!showScrollDown) {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Only smooth-scroll if we're already near the bottom (user hasn't scrolled up)
+    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    if (!nearBottom) return;
+
+    // New message arrived — smooth scroll
+    if (messages.length > prevMessageCount.current) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isStreaming, showScrollDown]);
+  }, [messages, isStreaming]);
 
   // Track scroll position to show "scroll to bottom" button
   React.useEffect(() => {
@@ -48,7 +71,7 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
 
   return (
     <div className="relative h-full">
-      <div ref={containerRef} className="h-full overflow-y-auto">
+      <div ref={containerRef} className="h-full overflow-y-auto no-scrollbar">
         <div className="flex flex-col">
           {/* User/assistant alternation with subtle separators */}
           {messages.map((msg, i) => {

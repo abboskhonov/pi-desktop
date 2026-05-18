@@ -13,6 +13,7 @@ export type SidecarCommand =
   | { type: 'start_session'; cwd: string; sessionFile?: string; requestId?: string; workspaceTrusted?: boolean }
   | { type: 'prompt'; text: string; contextPrefix?: string }
   | { type: 'steer'; text: string; contextPrefix?: string }
+  | { type: 'follow_up'; text: string; contextPrefix?: string }
   | { type: 'abort' }
   | { type: 'set_model'; provider: string; modelId: string }
   | { type: 'set_thinking'; level: string }
@@ -27,9 +28,11 @@ export type SidecarMessage =
   | { type: 'session_error'; requestId?: string; message: string; code?: string }
   | { type: 'stats_result'; requestId: string; stats: Record<string, unknown> }
   | { type: 'models_result'; requestId: string; models: unknown[] }
+  | { type: 'bash_result'; requestId: string; result: unknown }
   | { type: 'output_append'; line: { level: string; text: string; ts: number } }
   | { type: 'error'; requestId?: string; message: string }
   | { type: 'stopped' }
+  | { type: 'session_index_updated' }
 
 export interface SessionReadyPayload {
   cwd: string

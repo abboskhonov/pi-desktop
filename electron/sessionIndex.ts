@@ -19,6 +19,7 @@ export interface SessionListItem {
   updatedAt: string
   messageCount: number
   active: boolean
+  pinned: boolean
 }
 
 interface SessionInfo {
@@ -168,10 +169,10 @@ export class SessionIndexStore {
       .prepare(`
         select
           path, session_id, workspace_path, title,
-          created_at, updated_at, message_count
+          created_at, updated_at, message_count, pinned
         from sessions
         ${where.length ? `where ${where.join(' and ')}` : ''}
-        order by updated_at desc
+        order by pinned desc, updated_at desc
       `)
       .all(params) as Array<{
         path: string
@@ -181,6 +182,7 @@ export class SessionIndexStore {
         created_at: string
         updated_at: string
         message_count: number
+        pinned: number
       }>
 
     return rows.map((row) => ({
@@ -192,7 +194,58 @@ export class SessionIndexStore {
       updatedAt: row.updated_at,
       messageCount: row.message_count,
       active: false,
+      pinned: Boolean(row.pinned),
     }))
+  }
+
+  renameSession(sessionPath: string, newTitle: string): void {
+    // Update the session file's session_info entry
+    try {
+      const content = fs.readFileSync(sessionPath, 'utf8')
+      const lines = content.trim().split('\n')
+      let updated = false
+      const newLines = lines.map((line) => {
+        if (updated) return line
+        if (!line.trim()) return line
+        try {
+          const entry = JSON.parse(line) as Record<string, unknown>
+          if (entry.type === 'session_info') {
+            updated = true
+            return JSON.stringify({ ...entry, name: newTitle })
+          }
+        } catch {
+          // keep line as-is
+        }
+        return line
+      })
+      // If no session_info entry found, append one
+      if (!updated) {
+        newLines.push(JSON.stringify({ type: 'session_info', name: newTitle }))
+      }
+      fs.writeFileSync(sessionPath, newLines.join('\n') + '\n', 'utf8')
+    } catch {
+      // If file can't be read, just update DB
+    }
+
+    // Update DB
+    this.db
+      .prepare('update sessions set title = @title where path = @path')
+      .run({ path: sessionPath, title: newTitle })
+  }
+
+  deleteSession(sessionPath: string): void {
+    try {
+      fs.unlinkSync(sessionPath)
+    } catch {
+      // file may not exist
+    }
+    this.db.prepare('delete from sessions where path = @path').run({ path: sessionPath })
+  }
+
+  pinSession(sessionPath: string, pinned: boolean): void {
+    this.db
+      .prepare('update sessions set pinned = @pinned where path = @path')
+      .run({ path: sessionPath, pinned: pinned ? 1 : 0 })
   }
 
   private upsertSession(info: SessionInfo): void {
@@ -262,12 +315,20 @@ export class SessionIndexStore {
         created_at text not null,
         updated_at text not null,
         message_count integer not null default 0,
-        file_mtime integer not null default 0
+        file_mtime integer not null default 0,
+        pinned integer not null default 0
       );
 
       create index if not exists idx_sessions_workspace on sessions(workspace_path);
       create index if not exists idx_sessions_updated on sessions(updated_at);
     `)
+
+    // Add pinned column if upgrading from old schema
+    try {
+      this.db.prepare('select pinned from sessions limit 1').get()
+    } catch {
+      this.db.exec('alter table sessions add column pinned integer not null default 0')
+    }
   }
 }
 

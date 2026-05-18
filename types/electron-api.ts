@@ -20,6 +20,7 @@ export interface SessionListItem {
   updatedAt: string
   messageCount: number
   active: boolean
+  pinned: boolean
 }
 
 export interface AddWorkspaceResult {
@@ -86,6 +87,10 @@ export interface ElectronAPI {
   getModels: () => Promise<Array<{ id: string; name: string; provider: string; reasoning: boolean; contextWindow: number }>>
   setModel: (provider: string, modelId: string) => Promise<void>
   setThinking: (level: string) => Promise<void>
+  renameSession: (sessionPath: string, newTitle: string) => Promise<void>
+  deleteSession: (sessionPath: string) => Promise<void>
+  pinSession: (sessionPath: string, pinned: boolean) => Promise<void>
+
   getSessionStats: () => Promise<Record<string, unknown>>
 
   // Events

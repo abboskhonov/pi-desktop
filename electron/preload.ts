@@ -45,6 +45,13 @@ const api: ElectronAPI = {
     sessionName: string | null
   }> => ipcRenderer.invoke('get-session-messages', path),
 
+  renameSession: (path: string, newTitle: string): Promise<void> =>
+    ipcRenderer.invoke('rename-session', path, newTitle),
+  deleteSession: (path: string): Promise<void> =>
+    ipcRenderer.invoke('delete-session', path),
+  pinSession: (path: string, pinned: boolean): Promise<void> =>
+    ipcRenderer.invoke('pin-session', path, pinned),
+
   // Chat / Agent
   sendPrompt: (text: string, contextPrefix?: string): Promise<void> =>
     ipcRenderer.invoke('send-prompt', text, contextPrefix),

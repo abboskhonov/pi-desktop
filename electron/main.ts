@@ -79,6 +79,16 @@ function handleSidecarMessage(msg: SidecarMessage): void {
     case 'output_append':
       return
 
+    case 'session_index_updated': {
+      sessionIndex?.refreshSessions(state?.cwd)
+      mainWindow?.webContents.send('session-index-updated')
+      return
+    }
+
+    case 'bash_result':
+      // bash results are handled via session events for UI display
+      return
+
     case 'error':
       console.error('[sidecar]', msg.message)
       return
@@ -300,6 +310,21 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('get-session-messages', async (_event, sessionPath: string) => {
     return await readSessionMessages(sessionPath)
+  })
+
+  ipcMain.handle('rename-session', async (_event, sessionPath: string, newTitle: string) => {
+    sessionIndex?.renameSession(sessionPath, newTitle)
+    mainWindow?.webContents.send('session-index-updated')
+  })
+
+  ipcMain.handle('delete-session', async (_event, sessionPath: string) => {
+    sessionIndex?.deleteSession(sessionPath)
+    mainWindow?.webContents.send('session-index-updated')
+  })
+
+  ipcMain.handle('pin-session', async (_event, sessionPath: string, pinned: boolean) => {
+    sessionIndex?.pinSession(sessionPath, pinned)
+    mainWindow?.webContents.send('session-index-updated')
   })
 
   // ── Chat / Agent ───────────────────────────────────────────────────────

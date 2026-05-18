@@ -2,11 +2,15 @@ import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { useSession } from "@/hooks/useSession";
 
+import { NewSessionPane } from "./NewSessionPane";
+
 interface ChatPaneProps {
   sessionPath: string | null;
+  workspacePath?: string | null;
+  onStartSession?: (text: string, model?: { id: string; provider: string }) => void;
 }
 
-export function ChatPane({ sessionPath }: ChatPaneProps) {
+export function ChatPane({ sessionPath, workspacePath, onStartSession }: ChatPaneProps) {
   const {
     messages,
     sessionName,
@@ -17,7 +21,27 @@ export function ChatPane({ sessionPath }: ChatPaneProps) {
     abort,
     isStreaming,
     error,
+    currentModel,
   } = useSession(sessionPath);
+
+  const isEmpty = messages.length === 0 && !isLoading && !isStreaming;
+
+  // Show the big centered composer when there's nothing to display yet
+  if (isEmpty) {
+    return (
+      <div className="flex h-full flex-col bg-background">
+        {error && (
+          <div className="shrink-0 bg-destructive/10 text-destructive text-xs px-3 py-2 text-center">
+            {error}
+          </div>
+        )}
+        <NewSessionPane
+          onStartSession={sessionPath ? undefined : onStartSession}
+          onSend={sessionPath ? sendMessage : undefined}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -54,6 +78,7 @@ export function ChatPane({ sessionPath }: ChatPaneProps) {
         isStreaming={isStreaming}
         onStop={abort}
         disabled={!sessionPath}
+        currentModel={currentModel}
       />
     </div>
   );

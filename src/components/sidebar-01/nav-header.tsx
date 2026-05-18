@@ -1,13 +1,5 @@
 import * as React from "react";
 import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -23,8 +15,12 @@ import {
   IconGitBranch,
   IconTerminal2,
   IconFolder,
+  IconLayoutSidebar,
+  IconLayoutSidebarRightCollapse,
 } from "@tabler/icons-react";
-import type { WorkspaceInfo } from "../../../types/electron-api";
+import { useSidebar } from "@/components/ui/sidebar";
+import { CommandMenu } from "@/components/chat/CommandMenu";
+import type { WorkspaceInfo, SessionListItem } from "../../../types/electron-api";
 
 const navItems = [
   { id: "new-session", title: "New Session", icon: IconHome, active: true },
@@ -35,17 +31,25 @@ const navItems = [
 
 export function NavHeader({
   workspaces,
+  sessions,
   activeWorkspace,
   onSelectWorkspace,
+  onSelectSession,
   onAddWorkspace,
+  onNewSession,
 }: {
   workspaces: WorkspaceInfo[];
+  sessions: SessionListItem[];
   activeWorkspace: WorkspaceInfo | null;
   onSelectWorkspace: (path: string) => void;
+  onSelectSession: (path: string) => void;
   onAddWorkspace: () => void;
+  onNewSession: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [activeNav, setActiveNav] = React.useState("new-session");
+  const { state, toggleSidebar } = useSidebar();
+  const isCollapsed = state === "collapsed";
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -58,6 +62,66 @@ export function NavHeader({
     return () => document.removeEventListener("keydown", down);
   }, []);
 
+  // Collapsed icon-only rail
+  if (isCollapsed) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-3">
+        {/* Toggle expand */}
+        <button
+          onClick={() => toggleSidebar()}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Expand sidebar"
+          aria-label="Expand sidebar"
+        >
+          <IconLayoutSidebarRightCollapse className="h-4 w-4" />
+        </button>
+
+        {/* Search icon */}
+        <button
+          onClick={() => setOpen(true)}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+          title="Search"
+          aria-label="Search"
+        >
+          <IconSearch className="h-4 w-4" />
+        </button>
+
+        {/* Nav icons */}
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeNav === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => {
+                setActiveNav(item.id);
+                if (item.id === "new-session") onNewSession();
+              }}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+                isActive
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+              )}
+              title={item.title}
+              aria-label={item.title}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          );
+        })}
+
+        <CommandMenu
+          open={open}
+          onOpenChange={setOpen}
+          sessions={sessions}
+          onSelectSession={onSelectSession}
+        />
+      </div>
+    );
+  }
+
+  // Expanded full view
   return (
     <div className="flex flex-col gap-1 px-3 pt-3 pb-2">
       {/* Workspace switcher */}
@@ -94,8 +158,13 @@ export function NavHeader({
         </DropdownMenu>
 
         <div className="flex items-center gap-1">
-          <button className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-            <IconBolt className="h-4 w-4" />
+          <button
+            onClick={() => toggleSidebar()}
+            className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar"
+          >
+            <IconLayoutSidebar className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -123,7 +192,10 @@ export function NavHeader({
           return (
             <button
               key={item.id}
-              onClick={() => setActiveNav(item.id)}
+              onClick={() => {
+                setActiveNav(item.id);
+                if (item.id === "new-session") onNewSession();
+              }}
               className={cn(
                 "flex items-center gap-2.5 w-full rounded-md px-2.5 py-2 text-left text-sm transition-colors",
                 isActive
@@ -138,20 +210,12 @@ export function NavHeader({
         })}
       </div>
 
-      <CommandDialog open={open} onOpenChange={setOpen}>
-        <CommandInput placeholder="Search sessions, files, commands..." />
-        <CommandList>
-          <CommandEmpty>No results found.</CommandEmpty>
-          <CommandGroup heading="Recent sessions">
-            <CommandItem>Refactor sidebar</CommandItem>
-            <CommandItem>Git panel integration</CommandItem>
-          </CommandGroup>
-          <CommandGroup heading="Files">
-            <CommandItem>package.json</CommandItem>
-            <CommandItem>electron/main.ts</CommandItem>
-          </CommandGroup>
-        </CommandList>
-      </CommandDialog>
+      <CommandMenu
+        open={open}
+        onOpenChange={setOpen}
+        sessions={sessions}
+        onSelectSession={onSelectSession}
+      />
     </div>
   );
 }

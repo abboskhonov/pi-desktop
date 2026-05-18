@@ -1,6 +1,21 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { IconArrowUp, IconPlayerStop } from "@tabler/icons-react";
+
+interface ModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  reasoning: boolean;
+  contextWindow: number;
+}
 
 interface ComposerProps {
   input: string;
@@ -9,6 +24,7 @@ interface ComposerProps {
   isStreaming: boolean;
   onStop?: () => void;
   disabled?: boolean;
+  currentModel?: string | null;
 }
 
 export function Composer({
@@ -18,8 +34,32 @@ export function Composer({
   isStreaming,
   onStop,
   disabled,
+  currentModel,
 }: ComposerProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const [models, setModels] = React.useState<ModelInfo[]>([]);
+  const [selectedModelId, setSelectedModelId] = React.useState("");
+
+  // Fetch models from Pi agent
+  React.useEffect(() => {
+    window.electron
+      .getModels()
+      .then((list) => {
+        setModels(list);
+        if (list.length > 0 && !selectedModelId) {
+          setSelectedModelId(list[0].id);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  // Sync with session's current model
+  React.useEffect(() => {
+    if (currentModel && models.length > 0) {
+      const match = models.find((m) => m.name === currentModel);
+      if (match) setSelectedModelId(match.id);
+    }
+  }, [currentModel, models]);
 
   // Auto-resize textarea
   React.useEffect(() => {
@@ -35,6 +75,16 @@ export function Composer({
       if (!isStreaming && input.trim()) {
         onSend();
       }
+    }
+  };
+
+  const selectedModel = models.find((m) => m.id === selectedModelId);
+
+  const handleModelChange = (value: string) => {
+    setSelectedModelId(value);
+    const model = models.find((m) => m.id === value);
+    if (model) {
+      window.electron.setModel(model.provider, model.id).catch(console.error);
     }
   };
 
@@ -86,16 +136,30 @@ export function Composer({
         {/* Bottom bar: model selector + shortcuts */}
         <div className="flex items-center justify-between mt-1.5 px-1">
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground transition-colors">
-              <span className="inline-block h-2.5 w-2.5 rounded-sm bg-primary/50" />
-              openai/gpt-5
-              <span className="text-[10px]">▼</span>
-            </button>
-            <button className="flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-muted-foreground transition-colors">
-              <span>🔒</span>
-              Full access
-              <span className="text-[10px]">▼</span>
-            </button>
+            {models.length > 0 ? (
+              <Select value={selectedModelId} onValueChange={handleModelChange}>
+                <SelectTrigger className="w-fit border-none bg-transparent p-0 text-[11px] text-muted-foreground/70 hover:text-muted-foreground focus:ring-0 shadow-none h-auto gap-1">
+                  <span className="inline-block h-2.5 w-2.5 rounded-sm bg-primary/50" />
+                  <SelectValue placeholder="Model">
+                    <span>{selectedModel?.name ?? currentModel ?? "Model"}</span>
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <span className="text-sm">{model.name}</span>
+                      <span className="text-muted-foreground block text-xs">
+                        {model.provider}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/40">
+                {currentModel ?? "Loading models..."}
+              </span>
+            )}
           </div>
           <span className="text-[10px] text-muted-foreground/40">
             Shift + Enter for new line

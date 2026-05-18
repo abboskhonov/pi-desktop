@@ -7,7 +7,7 @@ interface UseSessionResult {
   isLoading: boolean;
   input: string;
   setInput: (v: string) => void;
-  sendMessage: () => void;
+  sendMessage: (text?: string) => void;
   abort: () => void;
   isStreaming: boolean;
   error: string | null;
@@ -115,24 +115,15 @@ export function useSession(sessionPath: string | null): UseSessionResult {
     };
   }, [currentModel]);
 
-  const sendMessage = React.useCallback(() => {
-    const text = input.trim();
+  const sendMessage = React.useCallback((overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
     if (!text) return;
 
-    // Add user message locally for immediate feedback
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `local-${Date.now()}`,
-        role: "user",
-        text,
-        timestamp: Date.now(),
-      },
-    ]);
     setInput("");
     setError(null);
 
-    // Send to Pi sidecar
+    // Send to Pi sidecar — the sidecar will emit message_start for the user message
+    // and message_delta/message_end for the assistant response
     window.electron
       .sendPrompt(text)
       .catch((err) => {

@@ -7,11 +7,13 @@ import type { WorkspaceInfo, SessionListItem } from "../../../types/electron-api
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeSessionPath: string | null;
   onSelectSession: (path: string) => void;
+  onWorkspaceChange?: (path: string | null) => void;
 }
 
 export function AppSidebar({
   activeSessionPath,
   onSelectSession,
+  onWorkspaceChange,
   ...props
 }: AppSidebarProps) {
   const [workspaces, setWorkspaces] = React.useState<WorkspaceInfo[]>([]);
@@ -29,6 +31,11 @@ export function AppSidebar({
     };
     load();
   }, []);
+
+  // Notify parent of workspace changes
+  React.useEffect(() => {
+    onWorkspaceChange?.(activeWorkspacePath);
+  }, [activeWorkspacePath]);
 
   // Load sessions when active workspace changes
   React.useEffect(() => {
@@ -56,17 +63,28 @@ export function AppSidebar({
   const activeWorkspace = workspaces.find((w) => w.path === activeWorkspacePath);
 
   return (
-    <Sidebar {...props} className="border-r border-border/40">
+    <Sidebar {...props} collapsible="icon" className="border-r border-border/40">
       <SidebarContent className="flex flex-col gap-0 overflow-hidden">
         <NavHeader
           workspaces={workspaces}
+          sessions={sessions}
           activeWorkspace={activeWorkspace ?? null}
-          onSelectWorkspace={(path) => setActiveWorkspacePath(path)}
+          onSelectWorkspace={(path) => {
+            setActiveWorkspacePath(path);
+          }}
+          onSelectSession={onSelectSession}
           onAddWorkspace={async () => {
             const result = await window.electron.addWorkspace();
             if (!result.cancelled && result.path) {
               setActiveWorkspacePath(result.path);
             }
+          }}
+          onNewSession={async () => {
+            if (!activeWorkspacePath) {
+              console.warn("No active workspace to start a session in");
+              return;
+            }
+            await window.electron.newSession(activeWorkspacePath);
           }}
         />
         <NavSessions

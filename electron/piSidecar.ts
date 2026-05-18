@@ -38,6 +38,7 @@ export type SidecarMessage =
   | { type: 'output_append'; line: { level: string; text: string; ts: number } }
   | { type: 'error'; requestId?: string; message: string }
   | { type: 'stopped' }
+  | { type: 'session_index_updated' }
 
 export interface SessionReadyPayload {
   cwd: string
