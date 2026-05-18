@@ -173,16 +173,33 @@ const FormattedText = React.memo(function FormattedText({ text }: { text: string
 });
 
 function areMessagesEqual(prev: ChatMessage, next: ChatMessage): boolean {
-  return (
-    prev.id === next.id &&
-    prev.role === next.role &&
-    prev.text === next.text &&
-    prev.timestamp === next.timestamp &&
-    prev.thinking === next.thinking &&
-    prev.modelName === next.modelName &&
-    prev.streaming === next.streaming &&
-    (prev.toolCalls?.length ?? 0) === (next.toolCalls?.length ?? 0)
-  );
+  if (prev.id !== next.id) return false;
+  if (prev.role !== next.role) return false;
+  if (prev.text !== next.text) return false;
+  if (prev.timestamp !== next.timestamp) return false;
+  if (prev.thinking !== next.thinking) return false;
+  if (prev.modelName !== next.modelName) return false;
+  if (prev.streaming !== next.streaming) return false;
+
+  const prevTC = prev.toolCalls ?? [];
+  const nextTC = next.toolCalls ?? [];
+  if (prevTC.length !== nextTC.length) return false;
+
+  for (let i = 0; i < prevTC.length; i++) {
+    const a = prevTC[i];
+    const b = nextTC[i];
+    if (
+      a.toolCallId !== b.toolCallId ||
+      a.output !== b.output ||
+      a.isError !== b.isError ||
+      a.streaming !== b.streaming ||
+      a.toolName !== b.toolName
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }) {

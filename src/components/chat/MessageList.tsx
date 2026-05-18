@@ -11,44 +11,57 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const [showScrollDown, setShowScrollDown] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const prevMessageCount = React.useRef(0);
+  const initialSnapRef = React.useRef(false);
+  const rafRef = React.useRef<number>(0);
 
-  // LayoutEffect: snap to bottom BEFORE paint on initial mount or session switch
-  // This prevents the flash of seeing the top of the message list
+  // ── Initial snap: hard scroll to bottom on first messages of a session ──
+  // Resets when messages clear (session switch) so the next session also snaps.
   React.useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // If this is the first render with messages (or after a session switch),
-    // set scrollTop directly — no animation, happens before paint
-    if (messages.length > 0 && prevMessageCount.current === 0) {
-      container.scrollTop = container.scrollHeight;
+    if (messages.length === 0) {
+      initialSnapRef.current = false;
+      return;
     }
-    prevMessageCount.current = messages.length;
+
+    // Snap once when the first messages arrive for this session
+    if (!initialSnapRef.current) {
+      container.scrollTop = container.scrollHeight;
+      initialSnapRef.current = true;
+    }
   }, [messages.length]);
 
-  // Effect: smooth scroll for new incoming messages while streaming
+  // ── Streaming scroll: batched smooth scroll to bottom ──
+  // Uses requestAnimationFrame so rapid tokens don't queue overlapping scrolls.
   React.useEffect(() => {
+    if (!isStreaming) return;
     const container = containerRef.current;
     if (!container) return;
 
-    // Only smooth-scroll if we're already near the bottom (user hasn't scrolled up)
-    const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    const nearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight < 100;
     if (!nearBottom) return;
 
-    // New message arrived — smooth scroll
-    if (messages.length > prevMessageCount.current) {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    });
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, [messages, isStreaming]);
 
-  // Track scroll position to show "scroll to bottom" button
+  // ── Scroll-to-bottom button visibility ──
   React.useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const onScroll = () => {
-      const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+      const nearBottom =
+        el.scrollHeight - el.scrollTop - el.clientHeight < 100;
       setShowScrollDown(!nearBottom);
     };
 
@@ -56,7 +69,8 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
     return () => el.removeEventListener("scroll", onScroll);
   }, []);
 
-  if (messages.length === 0 && !isLoading) {
+  // Empty state: include isStreaming so we don't show placeholder while waiting
+  if (messages.length === 0 && !isLoading && !isStreaming) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -71,9 +85,8 @@ export function MessageList({ messages, isLoading, isStreaming }: MessageListPro
 
   return (
     <div className="relative h-full">
-      <div ref={containerRef} className="h-full overflow-y-auto no-scrollbar">
+      <div ref={containerRef} className="h-full overflow-y-auto no-scrollbar pb-6">
         <div className="flex flex-col">
-          {/* User/assistant alternation with subtle separators */}
           {messages.map((msg, i) => {
             const prev = messages[i - 1];
             const showDivider = prev && prev.role !== msg.role && msg.role === "assistant";

@@ -40,6 +40,8 @@ function requireSidecar(): PiSidecarHost {
         mainWindow?.webContents.send('session-error', {
           message: 'Pi sidecar crashed repeatedly.',
           code: 'pi_sidecar_crashed',
+          _sessionFile: state?.sessionFile ?? null,
+          _sessionId: state?.sessionId ?? null,
         })
       },
     })
@@ -342,19 +344,19 @@ function registerIpcHandlers(): void {
   // ── Chat / Agent ───────────────────────────────────────────────────────
   ipcMain.handle('send-prompt', async (_event, text: string, contextPrefix?: string) => {
     const active = await ensureActiveSession()
-    if (!active) return
+    if (!active) throw new Error('No active session. Open or create a session first.')
     requireSidecar().send({ type: 'prompt', text, contextPrefix })
   })
 
   ipcMain.handle('send-steer', async (_event, text: string, contextPrefix?: string) => {
     const active = await ensureActiveSession()
-    if (!active) return
+    if (!active) throw new Error('No active session. Open or create a session first.')
     requireSidecar().send({ type: 'steer', text, contextPrefix })
   })
 
   ipcMain.handle('send-follow-up', async (_event, text: string, contextPrefix?: string) => {
     const active = await ensureActiveSession()
-    if (!active) return
+    if (!active) throw new Error('No active session. Open or create a session first.')
     requireSidecar().send({ type: 'follow_up', text, contextPrefix })
   })
 

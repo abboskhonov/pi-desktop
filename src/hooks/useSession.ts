@@ -24,6 +24,11 @@ interface UseSessionResult {
   currentModel: string | null;
 }
 
+type TokenBuffer = {
+  textDelta: string;
+  thinkingDelta: string;
+};
+
 export function useSession(sessionPath: string | null): UseSessionResult {
   const [messages, setMessages] = React.useState<ChatMessage[]>([]);
   const [sessionName, setSessionName] = React.useState<string | null>(null);
@@ -32,9 +37,51 @@ export function useSession(sessionPath: string | null): UseSessionResult {
   const [error, setError] = React.useState<string | null>(null);
   const [currentModel, setCurrentModel] = React.useState<string | null>(null);
 
-  // Streaming state is global per-session, not local to this hook instance.
   const activity = useSessionActivity(sessionPath || "");
   const isStreaming = activity.isStreaming;
+
+  // Token batching: accumulate deltas in a ref and flush via rAF.
+  // Reduces setMessages calls from ~1 per token to ~1 per frame.
+  const bufferRef = React.useRef<TokenBuffer | null>(null);
+  const flushRafRef = React.useRef<number>(0);
+
+  const flushBuffer = React.useCallback(() => {
+    flushRafRef.current = 0;
+    const buf = bufferRef.current;
+    if (!buf) return;
+    bufferRef.current = null;
+
+    setMessages((prev) => {
+      const last = prev.at(-1);
+      if (!last || last.role !== "assistant") return prev;
+
+      const next = [...prev];
+      next[next.length - 1] = {
+        ...last,
+        text: last.text + buf.textDelta,
+        thinking: buf.thinkingDelta
+          ? (last.thinking ?? "") + buf.thinkingDelta
+          : last.thinking,
+      };
+      return next;
+    });
+  }, []);
+
+  const scheduleFlush = React.useCallback(() => {
+    if (flushRafRef.current) return;
+    flushRafRef.current = requestAnimationFrame(flushBuffer);
+  }, [flushBuffer]);
+
+  // Clean up rAF on unmount / session switch
+  React.useEffect(() => {
+    return () => {
+      if (flushRafRef.current) {
+        cancelAnimationFrame(flushRafRef.current);
+        flushRafRef.current = 0;
+      }
+      bufferRef.current = null;
+    };
+  }, [sessionPath]);
 
   // Load historical messages when session path changes
   React.useEffect(() => {
@@ -45,12 +92,17 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       return;
     }
 
+    // Clear previous session's messages immediately so the user doesn't
+    // see stale content while the new session loads.
+    setMessages([]);
+    setSessionName(null);
+    setError(null);
+
     // User is looking at this session — clear the "new content" dot.
     markSessionViewed(sessionPath);
 
     let cancelled = false;
     setIsLoading(true);
-    setError(null);
 
     // Load historical messages from file
     window.electron
@@ -113,7 +165,6 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       const eventSessionFile = ev._sessionFile;
 
       // ── Cross-session events ─────────────────────────────────────────
-      // Update the other session's global state but don't touch our messages.
       if (eventSessionFile && eventSessionFile !== sessionPath) {
         if (ev.type === "agent_start") {
           setSessionStreaming(eventSessionFile, true);
@@ -138,6 +189,14 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       }
       if (ev.type === "agent_end") {
         if (sessionPath) {
+          // Flush any pending batched tokens before finalizing
+          if (flushRafRef.current) {
+            cancelAnimationFrame(flushRafRef.current);
+            flushRafRef.current = 0;
+          }
+          if (bufferRef.current) {
+            flushBuffer();
+          }
           setSessionStreaming(sessionPath, false);
           markSessionViewed(sessionPath);
         }
@@ -150,11 +209,44 @@ export function useSession(sessionPath: string | null): UseSessionResult {
         if (sessionPath) touchSessionToken(sessionPath);
       }
 
+      // ── Batched delta handling ──────────────────────────────────────
+      const assistantEvent = ev.assistantMessageEvent as
+        | { type: string; delta?: string }
+        | undefined;
+
+      if (
+        (ev.type === "message_delta" || ev.type === "message_update") &&
+        assistantEvent
+      ) {
+        if (assistantEvent.type === "text_delta" && assistantEvent.delta) {
+          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "" };
+          bufferRef.current.textDelta += assistantEvent.delta;
+          scheduleFlush();
+          return;
+        }
+        if (assistantEvent.type === "thinking_delta" && assistantEvent.delta) {
+          if (!bufferRef.current) bufferRef.current = { textDelta: "", thinkingDelta: "" };
+          bufferRef.current.thinkingDelta += assistantEvent.delta;
+          scheduleFlush();
+          return;
+        }
+      }
+
+      // Non-delta events go through applySessionEvent directly
       setMessages((prev) => applySessionEvent(prev, ev, currentModel));
     });
 
     const unsubError = window.electron.onSessionError((err) => {
       const errorSessionFile = err._sessionFile ?? null;
+
+      // Flush any pending tokens before showing error
+      if (flushRafRef.current) {
+        cancelAnimationFrame(flushRafRef.current);
+        flushRafRef.current = 0;
+      }
+      if (bufferRef.current) {
+        flushBuffer();
+      }
 
       // ── Cross-session error ─────────────────────────────────────────
       if (errorSessionFile && errorSessionFile !== sessionPath) {
@@ -172,7 +264,7 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       unsubEvent();
       unsubError();
     };
-  }, [sessionPath, currentModel]);
+  }, [sessionPath, currentModel, flushBuffer, scheduleFlush]);
 
   const sendMessage = React.useCallback(
     (overrideText?: string) => {
@@ -190,9 +282,17 @@ export function useSession(sessionPath: string | null): UseSessionResult {
   );
 
   const abort = React.useCallback(() => {
+    // Flush pending tokens before aborting so the user sees partial output
+    if (flushRafRef.current) {
+      cancelAnimationFrame(flushRafRef.current);
+      flushRafRef.current = 0;
+    }
+    if (bufferRef.current) {
+      flushBuffer();
+    }
     window.electron.abortSession().catch(() => {});
     if (sessionPath) setSessionStreaming(sessionPath, false);
-  }, [sessionPath]);
+  }, [sessionPath, flushBuffer]);
 
   return {
     messages,
