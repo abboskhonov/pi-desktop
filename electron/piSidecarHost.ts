@@ -224,6 +224,13 @@ export class PiSidecarHost {
     })
   }
 
+  async restart(): Promise<void> {
+    await this.stop()
+    this.stopping = false
+    this.restartCount = 0
+    this.spawnChild()
+  }
+
   stop(): Promise<void> {
     this.stopping = true
     if (!this.child) return Promise.resolve()

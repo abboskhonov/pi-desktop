@@ -1,6 +1,9 @@
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { spawn } from 'node:child_process'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { readWindowState, writeWindowState } from './window-state'
 import { SessionIndexStore } from './sessionIndex'
 import { readSessionMessages } from './sessionMessages'
@@ -171,7 +174,8 @@ function createWindow(): BrowserWindow {
     height: saved.height ?? 800,
     minWidth: 800,
     minHeight: 600,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    frame: process.platform === 'darwin',
     webPreferences: {
       preload: path.join(currentDir, '../preload/index.js'),
       contextIsolation: true,
@@ -191,6 +195,14 @@ function createWindow(): BrowserWindow {
     if (process.env.NODE_ENV === 'development') {
       win.webContents.openDevTools()
     }
+  })
+
+  win.on('maximize', () => {
+    win.webContents.send('window-maximized', true)
+  })
+
+  win.on('unmaximize', () => {
+    win.webContents.send('window-maximized', false)
   })
 
   win.on('close', () => {
@@ -224,6 +236,9 @@ async function loadURL(win: BrowserWindow): Promise<void> {
 // ─── App lifecycle ─────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  if (process.platform !== 'darwin') {
+    Menu.setApplicationMenu(null)
+  }
   mainWindow = createWindow()
   void loadURL(mainWindow)
 
@@ -271,6 +286,31 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('open-external', async (_event, url: string) => {
     await shell.openExternal(url)
+  })
+
+  // ── Window controls ────────────────────────────────────────────────────
+  ipcMain.handle('window-minimize', async () => {
+    mainWindow?.minimize()
+  })
+
+  ipcMain.handle('window-maximize', async () => {
+    if (mainWindow?.isMaximized()) {
+      mainWindow.unmaximize()
+    } else {
+      mainWindow?.maximize()
+    }
+  })
+
+  ipcMain.handle('window-close', async () => {
+    mainWindow?.close()
+  })
+
+  ipcMain.handle('window-is-maximized', async () => {
+    return mainWindow?.isMaximized() ?? false
+  })
+
+  ipcMain.handle('restart-sidecar', async () => {
+    await piSidecarHost?.restart()
   })
 
   // ── Workspaces ─────────────────────────────────────────────────────────
@@ -390,4 +430,123 @@ function registerIpcHandlers(): void {
     >({ type: 'get_stats', requestId })
     return response.stats
   })
+
+  // ── Skills ───────────────────────────────────────────────────────────
+  ipcMain.handle('get-installed-skills', async () => {
+    const home = homedir()
+    const agentsSkills = scanSkillsDir(path.join(home, '.agents', 'skills'))
+    const piSkills = scanSkillsDir(path.join(home, '.pi', 'agent', 'skills'))
+    return [...agentsSkills, ...piSkills]
+  })
+
+  ipcMain.handle('search-skills', async (_event, query: string) => {
+    const q = encodeURIComponent(query)
+    const res = await fetch(`https://skills.sh/api/search?q=${q}&limit=24`)
+    if (!res.ok) throw new Error(`skills.sh returned ${res.status}`)
+    return await res.json()
+  })
+
+  ipcMain.handle('install-skill', async (_event, spec: string, global: boolean, cwd?: string) => {
+    const args = ['skills', 'add', spec, '-y']
+    if (global) args.push('-g')
+    return new Promise<{ success: boolean; stdout: string; stderr: string }>((resolve) => {
+      const proc = spawn('npx', args, { cwd, env: process.env, shell: true })
+      let stdout = ''
+      let stderr = ''
+      proc.stdout.on('data', (d) => { stdout += String(d) })
+      proc.stderr.on('data', (d) => { stderr += String(d) })
+      proc.on('error', (err) => {
+        resolve({ success: false, stdout, stderr: err.message })
+      })
+      proc.on('close', (code) => {
+        resolve({ success: code === 0, stdout, stderr })
+      })
+    })
+  })
+
+  // ── Extensions ─────────────────────────────────────────────────────────
+  ipcMain.handle('search-extensions', async (_event, query: string) => {
+    const q = encodeURIComponent(query || 'pi-extension')
+    const res = await fetch(`https://registry.npmjs.org/-/v1/search?text=${q}&size=250`)
+    if (!res.ok) throw new Error(`npm registry returned ${res.status}`)
+    const data = await res.json()
+    return {
+      packages: data.objects?.map((obj: any) => ({
+        name: obj.package.name,
+        description: obj.package.description,
+        version: obj.package.version,
+        keywords: obj.package.keywords,
+      })) ?? []
+    }
+  })
+
+  ipcMain.handle('install-extension', async (_event, packageName: string) => {
+    const result = await new Promise<{ success: boolean; stdout: string; stderr: string }>((resolve) => {
+      const proc = spawn('pi', ['install', `npm:${packageName}`], { env: process.env, shell: true })
+      let stdout = ''
+      let stderr = ''
+      proc.stdout.on('data', (d) => { stdout += String(d) })
+      proc.stderr.on('data', (d) => { stderr += String(d) })
+      proc.on('error', (err) => {
+        resolve({ success: false, stdout, stderr: err.message })
+      })
+      proc.on('close', (code) => {
+        resolve({ success: code === 0, stdout, stderr })
+      })
+    })
+
+    if (result.success) {
+      // Restart sidecar so it picks up newly installed extensions/models
+      try {
+        await piSidecarHost?.restart()
+      } catch (err) {
+        console.error('Failed to restart sidecar after extension install:', err)
+      }
+    }
+
+    return result
+  })
+}
+
+// ─── Skill scanning helpers ────────────────────────────────────────────────
+
+function parseSkillMd(content: string): { name: string; description: string } {
+  const match = content.match(/^---\n([\s\S]*?)\n---/)
+  if (!match) return { name: '', description: '' }
+  const frontmatter = match[1]
+  const nameMatch = frontmatter.match(/name:\s*(.*)/)
+  const descMatch = frontmatter.match(/description:\s*(.*)/)
+  return {
+    name: nameMatch?.[1]?.trim() ?? '',
+    description: descMatch?.[1]?.trim() ?? '',
+  }
+}
+
+function scanSkillsDir(dir: string): Array<{ name: string; description: string; path: string; source: string }> {
+  const skills: Array<{ name: string; description: string; path: string; source: string }> = []
+  try {
+    const entries = readdirSync(dir)
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry)
+      const stat = statSync(entryPath)
+      if (stat.isDirectory()) {
+        const skillMdPath = path.join(entryPath, 'SKILL.md')
+        try {
+          const content = readFileSync(skillMdPath, 'utf-8')
+          const { name, description } = parseSkillMd(content)
+          skills.push({
+            name: name || entry,
+            description,
+            path: entryPath,
+            source: 'local',
+          })
+        } catch {
+          // No SKILL.md — skip
+        }
+      }
+    }
+  } catch {
+    // Directory doesn't exist — skip
+  }
+  return skills
 }

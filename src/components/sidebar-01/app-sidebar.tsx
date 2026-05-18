@@ -15,6 +15,7 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   activeSessionPath: string | null;
   activeView?: string;
   onSelectSession: (path: string) => void;
+  onNewSession?: () => void;
   onWorkspaceChange?: (path: string | null) => void;
   onNavigate?: (view: string) => void;
 }
@@ -23,6 +24,7 @@ export function AppSidebar({
   activeSessionPath,
   activeView,
   onSelectSession,
+  onNewSession,
   onWorkspaceChange,
   onNavigate,
   ...props
@@ -75,7 +77,7 @@ export function AppSidebar({
 
   return (
     <Sidebar {...props} collapsible="icon" className="border-r border-border/40">
-      <SidebarContent className="flex flex-col gap-0 overflow-hidden">
+      <SidebarContent className="flex flex-col gap-0 overflow-hidden pt-10">
         <NavHeader
           activeView={activeView}
           workspaces={workspaces}
@@ -97,6 +99,7 @@ export function AppSidebar({
               return;
             }
             await window.electron.newSession(activeWorkspacePath);
+            onNewSession?.();
           }}
           onNavigate={onNavigate}
         />

@@ -23,6 +23,13 @@ export interface SessionListItem {
   pinned: boolean
 }
 
+export interface SkillInfo {
+  name: string
+  description: string
+  path: string
+  source: string
+}
+
 export interface AddWorkspaceResult {
   cancelled: boolean
   path?: string
@@ -91,7 +98,23 @@ export interface ElectronAPI {
   deleteSession: (sessionPath: string) => Promise<void>
   pinSession: (sessionPath: string, pinned: boolean) => Promise<void>
 
+  getInstalledSkills: () => Promise<SkillInfo[]>
+  searchSkills: (query: string) => Promise<{ skills: Array<{ id: string; skillId: string; name: string; installs: number; source: string }> }>
+  installSkill: (spec: string, global: boolean, cwd?: string) => Promise<{ success: boolean; stdout: string; stderr: string }>
+
+  searchExtensions: (query: string) => Promise<{ packages: Array<{ name: string; description: string; version: string; keywords?: string[] }> }>
+  installExtension: (packageName: string) => Promise<{ success: boolean; stdout: string; stderr: string }>
+
   getSessionStats: () => Promise<Record<string, unknown>>
+
+  restartSidecar: () => Promise<void>
+
+  // Window controls
+  windowMinimize: () => Promise<void>
+  windowMaximize: () => Promise<void>
+  windowClose: () => Promise<void>
+  windowIsMaximized: () => Promise<boolean>
+  onWindowMaximized: (callback: (isMaximized: boolean) => void) => () => void
 
   // Events
   onSessionIndexUpdated: (callback: () => void) => () => void

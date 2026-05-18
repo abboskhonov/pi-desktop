@@ -14,6 +14,7 @@ import {
   IconArrowUp,
   IconCloud,
   IconPhotoScan,
+  IconRefresh,
 } from "@tabler/icons-react";
 
 const QUICK_PROMPTS = [
@@ -121,6 +122,17 @@ export function NewSessionPane({ onStartSession, onSend }: NewSessionPaneProps) 
               </Select>
 
               <div className="ml-auto flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => refreshModels()}
+                  className="text-muted-foreground hover:text-foreground transition-colors duration-100 ease-out"
+                  title="Refresh models"
+                  aria-label="Refresh models"
+                >
+                  <IconRefresh className="h-4 w-4" />
+                </Button>
+
                 <Button
                   variant="ghost"
                   size="icon-sm"

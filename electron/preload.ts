@@ -66,8 +66,38 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('set-model', provider, modelId),
   setThinking: (level: string): Promise<void> =>
     ipcRenderer.invoke('set-thinking', level),
+  getInstalledSkills: (): Promise<Array<{ name: string; description: string; path: string; source: string }>> =>
+    ipcRenderer.invoke('get-installed-skills'),
+
+  searchSkills: (query: string): Promise<{ skills: Array<{ id: string; skillId: string; name: string; installs: number; source: string }> }> =>
+    ipcRenderer.invoke('search-skills', query),
+
+  installSkill: (spec: string, global: boolean, cwd?: string): Promise<{ success: boolean; stdout: string; stderr: string }> =>
+    ipcRenderer.invoke('install-skill', spec, global, cwd),
+
+  searchExtensions: (query: string): Promise<{ packages: Array<{ name: string; description: string; version: string; keywords?: string[] }> }> =>
+    ipcRenderer.invoke('search-extensions', query),
+
+  installExtension: (packageName: string): Promise<{ success: boolean; stdout: string; stderr: string }> =>
+    ipcRenderer.invoke('install-extension', packageName),
+
   getSessionStats: (): Promise<Record<string, unknown>> =>
     ipcRenderer.invoke('get-session-stats'),
+
+  restartSidecar: (): Promise<void> => ipcRenderer.invoke('restart-sidecar'),
+
+  // Window controls
+  windowMinimize: (): Promise<void> => ipcRenderer.invoke('window-minimize'),
+  windowMaximize: (): Promise<void> => ipcRenderer.invoke('window-maximize'),
+  windowClose: (): Promise<void> => ipcRenderer.invoke('window-close'),
+  windowIsMaximized: (): Promise<boolean> => ipcRenderer.invoke('window-is-maximized'),
+  onWindowMaximized: (callback: (isMaximized: boolean) => void): (() => void) => {
+    const handler = (_event: unknown, isMaximized: boolean) => callback(isMaximized)
+    ipcRenderer.on('window-maximized', handler)
+    return () => {
+      ipcRenderer.removeListener('window-maximized', handler)
+    }
+  },
 
   // Events
   onSessionIndexUpdated: (callback: () => void): (() => void) => {

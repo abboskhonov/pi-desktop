@@ -1,11 +1,24 @@
 import { cn } from "@/lib/utils"
 
-function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
+interface KbdProps extends React.ComponentProps<"kbd"> {
+  active?: boolean
+}
+
+function Kbd({ className, active, ...props }: KbdProps) {
   return (
     <kbd
       data-slot="kbd"
+      data-active={active ? "" : undefined}
       className={cn(
-        "pointer-events-none inline-flex h-5 w-fit min-w-5 items-center justify-center gap-1 rounded-sm bg-muted px-1 font-sans text-xs font-medium text-muted-foreground select-none in-data-[slot=tooltip-content]:bg-background/20 in-data-[slot=tooltip-content]:text-background dark:in-data-[slot=tooltip-content]:bg-background/10 [&_svg:not([class*='size-'])]:size-3",
+        /* Box — tight, crisp, works on any surface */
+        "inline-flex h-[18px] w-fit min-w-[18px] shrink-0 items-center justify-center rounded-sm border border-foreground/10 bg-foreground/[0.05] px-[3px] font-sans text-[10px] font-medium leading-none text-foreground/60 select-none",
+        /* Press feedback — GPU-only, 75ms */
+        "transition-transform duration-75 ease-out",
+        "data-[active]:scale-[0.92] data-[active]:bg-foreground/10 data-[active]:text-foreground/90",
+        /* Tooltip overrides */
+        "in-data-[slot=tooltip-content]:border-white/20 in-data-[slot=tooltip-content]:bg-white/10 in-data-[slot=tooltip-content]:text-white/90 dark:in-data-[slot=tooltip-content]:border-white/10 dark:in-data-[slot=tooltip-content]:bg-white/5",
+        /* Icon sizing */
+        "[&_svg]:size-3",
         className
       )}
       {...props}
@@ -15,7 +28,7 @@ function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
 
 function KbdGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <kbd
+    <div
       data-slot="kbd-group"
       className={cn("inline-flex items-center gap-1", className)}
       {...props}

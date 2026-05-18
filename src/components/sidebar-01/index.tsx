@@ -7,6 +7,8 @@ import {
 import { AppSidebar } from "@/components/sidebar-01/app-sidebar";
 import { ChatPane } from "@/components/chat/ChatPane";
 import { SkillsView } from "@/components/skills/SkillsView";
+import { ExtensionsView } from "@/components/extensions/ExtensionsView";
+import { TitleBar } from "@/components/TitleBar";
 
 export default function Sidebar01() {
   const [activeSessionPath, setActiveSessionPath] = React.useState<string | null>(null);
@@ -36,6 +38,7 @@ export default function Sidebar01() {
 
   return (
     <SidebarProvider>
+      <TitleBar />
       <AppSidebar
         activeSessionPath={activeSessionPath}
         activeView={activeView}
@@ -43,10 +46,11 @@ export default function Sidebar01() {
           setActiveSessionPath(path);
           setActiveView('chat');
         }}
+        onNewSession={() => setActiveView('chat')}
         onWorkspaceChange={(path) => setActiveWorkspacePath(path)}
         onNavigate={(view) => setActiveView(view as 'chat' | 'skills' | 'extensions')}
       />
-      <SidebarInset className="flex flex-col bg-background overflow-hidden">
+      <SidebarInset className="flex flex-col bg-background overflow-hidden pt-10">
         <div className="flex h-11 shrink-0 items-center gap-3 border-b border-border/40 px-4">
           <SidebarTrigger className="sm:hidden" />
           {activeView === 'chat' && activeSessionPath && (
@@ -86,11 +90,9 @@ export default function Sidebar01() {
               }}
             />
           ) : activeView === 'skills' ? (
-            <SkillsView />
+            <SkillsView workspacePath={activeWorkspacePath} />
           ) : (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-muted-foreground">Extensions coming soon</p>
-            </div>
+            <ExtensionsView />
           )}
         </div>
       </SidebarInset>
