@@ -20,7 +20,7 @@ export default defineConfig({
           '@earendil-works/pi-coding-agent',
         ],
         output: {
-          entryFileNames: '[name].js',
+          entryFileNames: (chunk) => chunk.name === 'piSidecar' ? '[name].mjs' : '[name].js',
         },
       },
     },

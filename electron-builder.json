@@ -3,11 +3,14 @@
   "appId": "com.example.pi-desktop",
   "productName": "Pi Desktop",
   "asar": true,
+  "asarUnpack": [
+    "out/main/piSidecar.mjs",
+    "node_modules/**"
+  ],
   "directories": {
     "output": "release/${version}",
     "buildResources": "build"
   },
-  "icon": "build/icon.png",
   "files": ["out", "build"],
   "mac": {
     "category": "public.app-category.utilities",

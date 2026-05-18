@@ -506,12 +506,51 @@ function registerIpcHandlers(): void {
     })
 
     if (result.success) {
-      // Just notify the renderer to bust its cache and re-fetch.
-      // DON'T restart the sidecar — the running process already has the
-      // extension loaded in its session context. Restarting kills that state
-      // and the new process may not re-discover the extension in time.
-      console.log('[main] extension installed, telling renderer to refresh models')
-      mainWindow?.webContents.send('sidecar-ready')
+      // Extensions register their models at sidecar startup time.
+      // We MUST restart so the new sidecar discovers and loads them.
+      try {
+        const active = state
+        console.log('[main] restarting sidecar after extension install...')
+        await piSidecarHost?.restart()
+        console.log('[main] sidecar restarted, waiting for extension models...')
+
+        // Re-open the active session so the sidecar initializes in the correct workspace context.
+        if (active?.cwd) {
+          try {
+            await startSession(active.cwd, { sessionFile: active.sessionFile ?? undefined })
+            console.log('[main] session re-opened after restart')
+          } catch (err) {
+            console.error('[main] failed to re-open session after restart:', err)
+          }
+        }
+
+        // Extension discovery is async — wait for the sidecar to finish
+        // its init and for the resource loader to register extension models.
+        let lastIds: string[] = []
+        for (let attempt = 0; attempt < 20; attempt++) {
+          await new Promise((r) => setTimeout(r, 500))
+          try {
+            const requestId = createRequestId()
+            const response = await requireSidecar().request<
+              Extract<SidecarMessage, { type: 'models_result' }>
+            >({ type: 'get_models', requestId })
+            const ids = (response.models as Array<{ id: string }>).map((m) => m.id)
+            console.log('[main] poll', attempt, 'models:', ids.length, ids)
+            // Stable count for 2 polls in a row → init is done
+            if (ids.length > 0 && JSON.stringify(ids) === JSON.stringify(lastIds)) {
+              break
+            }
+            lastIds = ids
+          } catch {
+            // sidecar still booting, keep polling
+          }
+        }
+
+        // Notify renderer to bust cache and re-fetch.
+        mainWindow?.webContents.send('sidecar-ready')
+      } catch (err) {
+        console.error('[main] failed to restart sidecar after extension install:', err)
+      }
     }
 
     return result

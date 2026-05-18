@@ -11,12 +11,26 @@ interface ModelInfo {
 let cachedPromise: Promise<ModelInfo[]> | null = null;
 const MODELS_REFRESH_EVENT = "pi-models-refresh";
 
+const CUSTOM_MODEL: ModelInfo = {
+  id: 'accounts/fireworks/routers/kimi-k2p6-turbo',
+  name: 'Kimi K2.6 Turbo',
+  provider: 'fireworks',
+  reasoning: false,
+  contextWindow: 262_144,
+};
+
+function injectCustomModel(list: ModelInfo[]): ModelInfo[] {
+  if (list.some((m) => m.id === CUSTOM_MODEL.id)) return list;
+  return [...list, CUSTOM_MODEL];
+}
+
 function getModels(): Promise<ModelInfo[]> {
   if (!cachedPromise) {
     console.log('[useModels] fetching models from sidecar');
     cachedPromise = window.electron.getModels().then((list) => {
-      console.log('[useModels] got models:', list.map((m) => m.id));
-      return list;
+      const withCustom = injectCustomModel(list);
+      console.log('[useModels] got models:', withCustom.map((m) => m.id));
+      return withCustom;
     }).catch((err) => {
       cachedPromise = null;
       throw err;

@@ -419,6 +419,9 @@ async function handleCommand(cmd: SidecarCommand): Promise<void> {
     }
 
     case 'get_models': {
+      // Always invalidate so extension models discovered after startup
+      // (or after a sidecar restart) are reflected in the list.
+      invalidateModelRegistry()
       const models = await getModelRegistry().getAvailable()
       const mapped = (
         models as Array<{

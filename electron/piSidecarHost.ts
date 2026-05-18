@@ -1,11 +1,38 @@
-import { type ChildProcess, fork, spawnSync } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, type UtilityProcess, utilityProcess } from 'electron'
+import { app } from 'electron'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
-const SIDECAR_PATH = path.join(currentDir, 'piSidecar.js')
-const SIDECAR_SERVICE_NAME = 'pi-desktop-sidecar'
+
+function getAsarUnpackedPath(filePath: string) {
+  return filePath.includes('.asar') ? filePath.replace('.asar', '.asar.unpacked') : null
+}
+
+function resolveSidecarPath(): string {
+  // Dev: use the sibling .mjs next to the main bundle
+  const devPath = path.join(currentDir, 'piSidecar.mjs')
+  if (!app.isPackaged && require('node:fs').existsSync(devPath)) {
+    return devPath
+  }
+
+  // Production: the file is inside app.asar but asarUnpack extracts it
+  // to app.asar.unpacked. We need the real disk path so Node.js spawn
+  // can execute it.
+  const prodPath = path.join(app.getAppPath(), 'out', 'main', 'piSidecar.mjs')
+  const unpacked = getAsarUnpackedPath(prodPath)
+  if (unpacked && require('node:fs').existsSync(unpacked)) {
+    return unpacked
+  }
+  if (require('node:fs').existsSync(prodPath)) {
+    return prodPath
+  }
+
+  // Fallback (shouldn't happen)
+  return devPath
+}
+
+const SIDECAR_PATH = resolveSidecarPath()
 const RESTART_DELAY_MS = 1500
 const MAX_RESTARTS = 3
 
@@ -49,41 +76,14 @@ export interface SessionReadyPayload {
   thinkingLevel: string | null
 }
 
-type SidecarProcess = UtilityProcess | ChildProcess
-
 interface PendingRequest {
   resolve: (msg: SidecarMessage) => void
   reject: (err: Error) => void
   timeout: NodeJS.Timeout
 }
 
-function isUtilityProcess(child: SidecarProcess): child is UtilityProcess {
-  return 'postMessage' in child
-}
-
-function findNodeExecutable(): string | null {
-  if (app.isPackaged) return null
-  const candidates = [process.env.OPENPI_NODE_EXECUTABLE, 'node'].filter((c): c is string => Boolean(c))
-  for (const candidate of candidates) {
-    const result = spawnSync(candidate, ['-e', 'process.exit(process.versions.electron ? 1 : 0)'], {
-      encoding: 'utf-8',
-      timeout: 3000,
-    })
-    if (result.status === 0) return candidate
-  }
-  return null
-}
-
-function sendToSidecar(child: SidecarProcess, command: SidecarCommand): void {
-  if (isUtilityProcess(child)) {
-    child.postMessage(command)
-    return
-  }
-  child.send(command)
-}
-
 export class PiSidecarHost {
-  private child: SidecarProcess | null = null
+  private child: ChildProcess | null = null
   private readonly onMessage: (msg: SidecarMessage) => void
   private readonly onCrash: () => void
   private readonly onReady: () => void
@@ -115,16 +115,12 @@ export class PiSidecarHost {
   }
 
   private spawnChild(): void {
-    const nodeExecutable = findNodeExecutable()
-    const child: SidecarProcess = nodeExecutable
-      ? fork(SIDECAR_PATH, [], {
-          execPath: nodeExecutable,
-          stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-        })
-      : utilityProcess.fork(SIDECAR_PATH, [], {
-          serviceName: SIDECAR_SERVICE_NAME,
-          stdio: 'pipe',
-        })
+    console.log('[sidecar-host] spawning sidecar at', SIDECAR_PATH)
+
+    const child = spawn('node', [SIDECAR_PATH], {
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      env: process.env,
+    })
 
     child.stdout?.on('data', (chunk: Buffer) => {
       this._stdoutBuf += chunk.toString('utf8')
@@ -179,55 +175,50 @@ export class PiSidecarHost {
     })
 
     // Capture the child reference so the exit handler only acts for THIS child.
-    // Without this, a restart() race causes the old child's exit to clobber the
-    // new child (this.child = null) and clear pendingRequests.
     const childRef = child
-    ;(child as unknown as { on(event: 'exit', listener: (code: number | null) => void): void }).on(
-      'exit',
-      (code) => {
-        // If a new child already replaced this one, ignore.
-        if (this.child !== childRef) {
-          return
-        }
+    child.on('exit', (code) => {
+      // If a new child already replaced this one, ignore.
+      if (this.child !== childRef) {
+        return
+      }
 
-        this.child = null
-        for (const pending of this.pendingRequests.values()) {
-          clearTimeout(pending.timeout)
-          pending.reject(new Error(`Pi sidecar exited with code ${code}`))
-        }
-        this.pendingRequests.clear()
+      this.child = null
+      for (const pending of this.pendingRequests.values()) {
+        clearTimeout(pending.timeout)
+        pending.reject(new Error(`Pi sidecar exited with code ${code}`))
+      }
+      this.pendingRequests.clear()
 
-        for (const [buf, level] of [
-          [this._stdoutBuf, 'info' as const],
-          [this._stderrBuf, 'error' as const],
-        ] as const) {
-          if (buf.trim()) {
-            this.onMessage({
-              type: 'output_append',
-              line: { level, text: `[sidecar] ${buf}`, ts: Date.now() },
-            })
-          }
-        }
-        this._stdoutBuf = ''
-        this._stderrBuf = ''
-
-        if (this.stopping) return
-        if (this.restartCount < MAX_RESTARTS) {
-          this.restartCount++
-          setTimeout(() => {
-            if (!this.stopping) this.spawnChild()
-          }, RESTART_DELAY_MS)
-        } else {
-          this.onCrash()
+      for (const [buf, level] of [
+        [this._stdoutBuf, 'info' as const],
+        [this._stderrBuf, 'error' as const],
+      ] as const) {
+        if (buf.trim()) {
+          this.onMessage({
+            type: 'output_append',
+            line: { level, text: `[sidecar] ${buf}`, ts: Date.now() },
+          })
         }
       }
-    )
+      this._stdoutBuf = ''
+      this._stderrBuf = ''
+
+      if (this.stopping) return
+      if (this.restartCount < MAX_RESTARTS) {
+        this.restartCount++
+        setTimeout(() => {
+          if (!this.stopping) this.spawnChild()
+        }, RESTART_DELAY_MS)
+      } else {
+        this.onCrash()
+      }
+    })
 
     this.child = child
   }
 
   send(command: SidecarCommand): void {
-    if (this.child) sendToSidecar(this.child, command)
+    this.child?.send?.(command)
   }
 
   request<T extends SidecarMessage>(
@@ -247,7 +238,7 @@ export class PiSidecarHost {
         reject,
         timeout,
       })
-      sendToSidecar(this.child!, command)
+      this.child!.send!(command)
     })
   }
 
@@ -282,8 +273,8 @@ export class PiSidecarHost {
         }
       }
 
-      this.child!.on('message', cleanup)
-      sendToSidecar(this.child!, { type: 'stop' })
+      this.child.on('message', cleanup)
+      this.child.send({ type: 'stop' })
     })
   }
 }
