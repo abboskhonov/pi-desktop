@@ -67,7 +67,13 @@ function handleSidecarMessage(msg: SidecarMessage): void {
     }
 
     case 'session_event': {
-      mainWindow?.webContents.send('session-event', msg.event)
+      // Tag events with the active session so the renderer can route them
+      // to the correct session's state (fixes stop-button bleed when switching chats).
+      mainWindow?.webContents.send('session-event', {
+        ...msg.event,
+        _sessionFile: state?.sessionFile ?? null,
+        _sessionId: state?.sessionId ?? null,
+      })
       return
     }
 

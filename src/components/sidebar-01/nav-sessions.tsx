@@ -11,6 +11,7 @@ import {
   IconTrash,
   IconPin,
   IconPinFilled,
+  IconLoader2,
 } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useSessionActivity } from "@/lib/sessionActivity";
 import type { SessionListItem } from "../../../types/electron-api";
 
 function formatTimeAgo(iso: string): string {
@@ -65,6 +67,7 @@ function SessionItem({
   const [editValue, setEditValue] = React.useState(session.title);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const activity = useSessionActivity(session.path);
 
   React.useEffect(() => {
     if (editing && inputRef.current) {
@@ -132,6 +135,15 @@ function SessionItem({
                 {session.title || "Untitled"}
               </span>
             </span>
+
+            {/* Activity indicators — shown while streaming or after new content */}
+            {activity.isStreaming && (
+              <IconLoader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+            )}
+            {!activity.isStreaming && activity.hasNewContent && !isActive && (
+              <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+            )}
+
             <span className="text-[10px] text-muted-foreground/60 tabular-nums shrink-0">
               {formatTimeAgo(session.updatedAt)}
             </span>
@@ -147,19 +159,21 @@ function SessionItem({
             )}
           >
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  onClick={(e) => e.stopPropagation()}
-                  className={cn(
-                    "flex h-5 w-5 items-center justify-center rounded transition-colors",
-                    isActive
-                      ? "hover:bg-accent-foreground/10"
-                      : "hover:bg-accent/80"
-                  )}
-                >
-                  <IconDotsVertical className="h-3.5 w-3.5" />
-                </button>
-              </DropdownMenuTrigger>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    onClick={(e) => e.stopPropagation()}
+                    className={cn(
+                      "flex h-5 w-5 items-center justify-center rounded transition-colors",
+                      isActive
+                        ? "hover:bg-accent-foreground/10"
+                        : "hover:bg-accent/80"
+                    )}
+                  >
+                    <IconDotsVertical className="h-3.5 w-3.5" />
+                  </button>
+                }
+              />
               <DropdownMenuContent align="end" side="bottom" sideOffset={4}>
                 <DropdownMenuItem
                   onClick={() => {

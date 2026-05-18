@@ -1,5 +1,14 @@
 import * as React from "react";
-import { applySessionEvent, type ChatMessage, type SessionEvent } from "@/lib/sessionEvents";
+import {
+  applySessionEvent,
+  type ChatMessage,
+  type SessionEvent,
+} from "@/lib/sessionEvents";
+import {
+  setSessionStreaming,
+  markSessionViewed,
+  useSessionActivity,
+} from "@/lib/sessionActivity";
 
 interface UseSessionResult {
   messages: ChatMessage[];
@@ -19,9 +28,12 @@ export function useSession(sessionPath: string | null): UseSessionResult {
   const [sessionName, setSessionName] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
   const [input, setInput] = React.useState("");
-  const [isStreaming, setIsStreaming] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [currentModel, setCurrentModel] = React.useState<string | null>(null);
+
+  // Streaming state is global per-session, not local to this hook instance.
+  const activity = useSessionActivity(sessionPath || "");
+  const isStreaming = activity.isStreaming;
 
   // Load historical messages when session path changes
   React.useEffect(() => {
@@ -29,9 +41,11 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       setMessages([]);
       setSessionName(null);
       setError(null);
-      setIsStreaming(false);
       return;
     }
+
+    // User is looking at this session — clear the "new content" dot.
+    markSessionViewed(sessionPath);
 
     let cancelled = false;
     setIsLoading(true);
@@ -90,14 +104,36 @@ export function useSession(sessionPath: string | null): UseSessionResult {
     });
 
     const unsubEvent = window.electron.onSessionEvent((event) => {
-      const ev = event as SessionEvent;
+      const ev = event as SessionEvent & {
+        _sessionFile?: string | null;
+        _sessionId?: string | null;
+      };
 
+      const eventSessionFile = ev._sessionFile;
+
+      // Events for a different session — update that session's global state
+      // but don't touch our local messages.
+      if (eventSessionFile && eventSessionFile !== sessionPath) {
+        if (ev.type === "agent_start") {
+          setSessionStreaming(eventSessionFile, true);
+        }
+        if (ev.type === "agent_end") {
+          setSessionStreaming(eventSessionFile, false);
+        }
+        return;
+      }
+
+      // Events for our session (or untagged legacy events)
       if (ev.type === "agent_start") {
-        setIsStreaming(true);
+        if (sessionPath) setSessionStreaming(sessionPath, true);
         setError(null);
       }
       if (ev.type === "agent_end") {
-        setIsStreaming(false);
+        if (sessionPath) {
+          setSessionStreaming(sessionPath, false);
+          // User is actively viewing this session, so don't show a blue dot.
+          markSessionViewed(sessionPath);
+        }
       }
 
       setMessages((prev) => applySessionEvent(prev, ev, currentModel));
@@ -105,7 +141,7 @@ export function useSession(sessionPath: string | null): UseSessionResult {
 
     const unsubError = window.electron.onSessionError((err) => {
       setError(err.message);
-      setIsStreaming(false);
+      if (sessionPath) setSessionStreaming(sessionPath, false);
     });
 
     return () => {
@@ -113,28 +149,27 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       unsubEvent();
       unsubError();
     };
-  }, [currentModel]);
+  }, [sessionPath, currentModel]);
 
-  const sendMessage = React.useCallback((overrideText?: string) => {
-    const text = (overrideText ?? input).trim();
-    if (!text) return;
+  const sendMessage = React.useCallback(
+    (overrideText?: string) => {
+      const text = (overrideText ?? input).trim();
+      if (!text) return;
 
-    setInput("");
-    setError(null);
+      setInput("");
+      setError(null);
 
-    // Send to Pi sidecar — the sidecar will emit message_start for the user message
-    // and message_delta/message_end for the assistant response
-    window.electron
-      .sendPrompt(text)
-      .catch((err) => {
+      window.electron.sendPrompt(text).catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
       });
-  }, [input]);
+    },
+    [input]
+  );
 
   const abort = React.useCallback(() => {
     window.electron.abortSession().catch(() => {});
-    setIsStreaming(false);
-  }, []);
+    if (sessionPath) setSessionStreaming(sessionPath, false);
+  }, [sessionPath]);
 
   return {
     messages,
