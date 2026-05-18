@@ -8,6 +8,7 @@ import {
   setSessionStreaming,
   markSessionViewed,
   useSessionActivity,
+  touchSessionToken,
 } from "@/lib/sessionActivity";
 
 interface UseSessionResult {
@@ -111,8 +112,8 @@ export function useSession(sessionPath: string | null): UseSessionResult {
 
       const eventSessionFile = ev._sessionFile;
 
-      // Events for a different session — update that session's global state
-      // but don't touch our local messages.
+      // ── Cross-session events ─────────────────────────────────────────
+      // Update the other session's global state but don't touch our messages.
       if (eventSessionFile && eventSessionFile !== sessionPath) {
         if (ev.type === "agent_start") {
           setSessionStreaming(eventSessionFile, true);
@@ -120,10 +121,17 @@ export function useSession(sessionPath: string | null): UseSessionResult {
         if (ev.type === "agent_end") {
           setSessionStreaming(eventSessionFile, false);
         }
+        if (
+          ev.type === "message_delta" ||
+          ev.type === "message_update" ||
+          ev.type === "tool_execution_update"
+        ) {
+          touchSessionToken(eventSessionFile);
+        }
         return;
       }
 
-      // Events for our session (or untagged legacy events)
+      // ── Our session (or untagged legacy events) ──────────────────────
       if (ev.type === "agent_start") {
         if (sessionPath) setSessionStreaming(sessionPath, true);
         setError(null);
@@ -131,15 +139,30 @@ export function useSession(sessionPath: string | null): UseSessionResult {
       if (ev.type === "agent_end") {
         if (sessionPath) {
           setSessionStreaming(sessionPath, false);
-          // User is actively viewing this session, so don't show a blue dot.
           markSessionViewed(sessionPath);
         }
+      }
+      if (
+        ev.type === "message_delta" ||
+        ev.type === "message_update" ||
+        ev.type === "tool_execution_update"
+      ) {
+        if (sessionPath) touchSessionToken(sessionPath);
       }
 
       setMessages((prev) => applySessionEvent(prev, ev, currentModel));
     });
 
     const unsubError = window.electron.onSessionError((err) => {
+      const errorSessionFile = err._sessionFile ?? null;
+
+      // ── Cross-session error ─────────────────────────────────────────
+      if (errorSessionFile && errorSessionFile !== sessionPath) {
+        setSessionStreaming(errorSessionFile, false);
+        return;
+      }
+
+      // ── Our session (or untagged legacy error) ──────────────────────
       setError(err.message);
       if (sessionPath) setSessionStreaming(sessionPath, false);
     });

@@ -91,8 +91,8 @@ const api: ElectronAPI = {
       ipcRenderer.removeListener('session-event', handler)
     }
   },
-  onSessionError: (callback: (err: { message: string; code?: string }) => void): (() => void) => {
-    const handler = (_event: unknown, err: { message: string; code?: string }) => callback(err)
+  onSessionError: (callback: (err: { message: string; code?: string; _sessionFile?: string | null; _sessionId?: string | null }) => void): (() => void) => {
+    const handler = (_event: unknown, err: { message: string; code?: string; _sessionFile?: string | null; _sessionId?: string | null }) => callback(err)
     ipcRenderer.on('session-error', handler)
     return () => {
       ipcRenderer.removeListener('session-error', handler)

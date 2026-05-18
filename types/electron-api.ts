@@ -97,7 +97,7 @@ export interface ElectronAPI {
   onSessionIndexUpdated: (callback: () => void) => () => void
   onSessionReady: (callback: (payload: SessionReadyPayload) => void) => () => void
   onSessionEvent: (callback: (event: Record<string, unknown>) => void) => () => void
-  onSessionError: (callback: (err: { message: string; code?: string }) => void) => () => void
+  onSessionError: (callback: (err: { message: string; code?: string; _sessionFile?: string | null; _sessionId?: string | null }) => void) => () => void
 }
 
 declare global {

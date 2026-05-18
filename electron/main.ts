@@ -78,9 +78,13 @@ function handleSidecarMessage(msg: SidecarMessage): void {
     }
 
     case 'session_error':
+      // Tag errors with the active session so the renderer routes them
+      // to the correct session's state (fixes stuck-thinking on crashed sessions).
       mainWindow?.webContents.send('session-error', {
         message: msg.message,
         ...(msg.code ? { code: msg.code } : {}),
+        _sessionFile: state?.sessionFile ?? null,
+        _sessionId: state?.sessionId ?? null,
       })
       return
 
