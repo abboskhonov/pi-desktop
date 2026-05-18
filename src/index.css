@@ -134,13 +134,10 @@
   }
 }
 
-/* Completely hidden scrollbar utility */
+/* Hidden scrollbar utility — prefer standards-only to avoid compositing hit */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
 }
 
 /* WebKit subtle fallback scrollbar */

@@ -17,6 +17,7 @@ export interface ChatMessage {
   thinking?: string;
   modelName?: string;
   toolCalls?: ToolCall[];
+  streaming?: boolean;
 }
 
 function InlineCode({ children }: { children: React.ReactNode }) {
@@ -52,7 +53,7 @@ function ToolCallRow({ call }: { call: ToolCall }) {
   );
 }
 
-function ThinkingBlock({ text }: { text: string }) {
+const ThinkingBlock = React.memo(function ThinkingBlock({ text }: { text: string }) {
   const [open, setOpen] = React.useState(false);
   return (
     <div className="my-2">
@@ -70,9 +71,9 @@ function ThinkingBlock({ text }: { text: string }) {
       )}
     </div>
   );
-}
+});
 
-function InlineFormat({ text }: { text: string }) {
+const InlineFormat = React.memo(function InlineFormat({ text }: { text: string }) {
   const parts: Array<{ type: "text" | "code" | "bold" | "link"; content: string; href?: string }> = [];
 
   let remaining = text;
@@ -129,9 +130,9 @@ function InlineFormat({ text }: { text: string }) {
       })}
     </>
   );
-}
+});
 
-function FormattedText({ text }: { text: string }) {
+const FormattedText = React.memo(function FormattedText({ text }: { text: string }) {
   const lines = text.split("\n");
 
   return (
@@ -169,9 +170,22 @@ function FormattedText({ text }: { text: string }) {
       })}
     </>
   );
+});
+
+function areMessagesEqual(prev: ChatMessage, next: ChatMessage): boolean {
+  return (
+    prev.id === next.id &&
+    prev.role === next.role &&
+    prev.text === next.text &&
+    prev.timestamp === next.timestamp &&
+    prev.thinking === next.thinking &&
+    prev.modelName === next.modelName &&
+    prev.streaming === next.streaming &&
+    (prev.toolCalls?.length ?? 0) === (next.toolCalls?.length ?? 0)
+  );
 }
 
-export function Message({ msg }: { msg: ChatMessage }) {
+export const Message = React.memo(function Message({ msg }: { msg: ChatMessage }) {
   if (msg.role === "user") {
     return (
       <div className="py-4">
@@ -210,13 +224,17 @@ export function Message({ msg }: { msg: ChatMessage }) {
           </div>
         )}
 
-        {/* Text content */}
+        {/* Text content — render plain text while streaming to avoid regex cost on every token */}
         {msg.text && (
           <div className="text-[14px] leading-[1.7] text-foreground/85 whitespace-pre-wrap break-words">
-            <FormattedText text={msg.text} />
+            {msg.streaming ? (
+              <span>{msg.text}</span>
+            ) : (
+              <FormattedText text={msg.text} />
+            )}
           </div>
         )}
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => areMessagesEqual(prevProps.msg, nextProps.msg));

@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useModels } from "@/hooks/useModels";
 import {
   Select,
   SelectContent,
@@ -8,14 +9,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { IconArrowUp, IconPlayerStop } from "@tabler/icons-react";
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  provider: string;
-  reasoning: boolean;
-  contextWindow: number;
-}
 
 interface ComposerProps {
   input: string;
@@ -36,22 +29,12 @@ export function Composer({
   disabled,
   currentModel,
 }: ComposerProps) {
-  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const [models, setModels] = React.useState<ModelInfo[]>([]);
-  const [selectedModelId, setSelectedModelId] = React.useState("");
-
-  // Fetch models from Pi agent
-  React.useEffect(() => {
-    window.electron
-      .getModels()
-      .then((list) => {
-        setModels(list);
-        if (list.length > 0 && !selectedModelId) {
-          setSelectedModelId(list[0].id);
-        }
-      })
-      .catch(console.error);
-  }, []);
+  const {
+    models,
+    selectedModelId,
+    setSelectedModelId,
+    selectedModel,
+  } = useModels();
 
   // Sync with session's current model
   React.useEffect(() => {
@@ -59,15 +42,7 @@ export function Composer({
       const match = models.find((m) => m.name === currentModel);
       if (match) setSelectedModelId(match.id);
     }
-  }, [currentModel, models]);
-
-  // Auto-resize textarea
-  React.useEffect(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  }, [input]);
+  }, [currentModel, models, setSelectedModelId]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -78,8 +53,6 @@ export function Composer({
     }
   };
 
-  const selectedModel = models.find((m) => m.id === selectedModelId);
-
   const handleModelChange = (value: string) => {
     setSelectedModelId(value);
     const model = models.find((m) => m.id === value);
@@ -89,11 +62,10 @@ export function Composer({
   };
 
   return (
-    <div className="border-t border-border/30 bg-background">
-      <div className="max-w-3xl mx-auto px-3 py-2">
+    <div className="shrink-0 border-t border-border/30 bg-background/80 backdrop-blur-xl shadow-[0_-8px_32px_rgba(0,0,0,0.15)] dark:shadow-[0_-8px_32px_rgba(0,0,0,0.35)]">
+      <div className="max-w-3xl mx-auto px-4 py-3">
         <div className="relative rounded-xl border border-border/60 bg-muted/20 focus-within:border-border transition-colors">
           <textarea
-            ref={textareaRef}
             value={input}
             onChange={(e) => onInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -103,7 +75,7 @@ export function Composer({
             className={cn(
               "w-full resize-none bg-transparent px-3 py-2.5 pr-12 text-[14px] outline-none",
               "placeholder:text-muted-foreground/50",
-              "min-h-[44px] max-h-[160px]"
+              "min-h-[44px] max-h-[160px] field-sizing-content"
             )}
           />
 
